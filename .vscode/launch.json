@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'save_as_pdf'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=save_as_pdf",
+                    "--package=ippper"
+                ],
+                "filter": {
+                    "name": "save_as_pdf",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

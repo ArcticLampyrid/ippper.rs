@@ -1,0 +1,27 @@
+[package]
+authors = ["ArcticLampyrid <ArcticLampyrid@outlook.com>"]
+categories = ["network-programming"]
+description = "A library for building simple ipp servers"
+documentation = "https://docs.rs/ippper"
+edition = "2018"
+keywords = ["ipp-server", "ipp", "print"]
+license = "BSD-3-Clause"
+name = "ippper"
+readme = "README.md"
+repository = "https://github.com/ArcticLampyrid/ippper.rs/"
+version = "0.1.0"
+
+[dependencies]
+anyhow = "1.0.43"
+async-compression = {version = "0.3.8", features = ["futures-io", "gzip"]}
+async-trait = "0.1.51"
+futures = "0.3.16"
+hyper = {version = "0.14", features = ["full"]}
+ipp = "3.0.0"
+num-traits = "0.2.14"
+thiserror = "1.0"
+tokio = {version = "1", features = ["full"]}
+tokio-util = {version = "0.6.7", features = ["io", "compat"]}
+
+[[example]]
+name = "save_as_pdf"
