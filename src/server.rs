@@ -98,7 +98,7 @@ pub trait IppServerHandler: Send + Sync + 'static {
 
     fn check_version(&self, req: &IppRequestResponse) -> bool {
         let version = req.header().version.0;
-        return version <= self.version().0;
+        version <= self.version().0
     }
 
     fn build_error_response(

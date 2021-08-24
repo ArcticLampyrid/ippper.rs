@@ -52,7 +52,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             job_id: AtomicI32::new(1000),
             host: "defaulthost:631".to_string(),
             info: PrinterInfoBuilder::default().build().unwrap(),
-            handler: handler,
+            handler,
             default_document_format: "application/pdf".to_string(),
             supported_document_formats: vec!["application/pdf".to_string()],
         }
