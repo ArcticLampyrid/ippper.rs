@@ -24,11 +24,15 @@ pub trait SimpleIppServiceHandler: Send + Sync + 'static {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Builder)]
 pub struct PrinterInfo {
+    #[builder(default = r#""IppServer".to_string()"#)]
     pub name: String,
+    #[builder(default = r#"Some("IppServer by ippper".to_string())"#)]
     pub info: Option<String>,
+    #[builder(default = r#"Some("IppServer by ippper".to_string())"#)]
     pub make_and_model: Option<String>,
+    #[builder(default = r#"None"#)]
     pub uuid: Option<Uuid>,
 }
 
@@ -47,12 +51,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             start_time: Instant::now(),
             job_id: AtomicI32::new(1000),
             host: "defaulthost:631".to_string(),
-            info: PrinterInfo {
-                name: "IppServer".to_string(),
-                info: Some("IppServer by ippper".to_string()),
-                make_and_model: Some("IppServer by ippper".to_string()),
-                uuid: None,
-            },
+            info: PrinterInfoBuilder::default().build().unwrap(),
             handler: handler,
             default_document_format: "application/pdf".to_string(),
             supported_document_formats: vec!["application/pdf".to_string()],
