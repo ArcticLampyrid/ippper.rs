@@ -117,7 +117,10 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             ),
             IppAttribute::new(
                 IppAttribute::IPP_VERSIONS_SUPPORTED,
-                IppValue::Keyword("1.1".to_string()),
+                IppValue::Array(vec![
+                    IppValue::Keyword("1.0".to_string()),
+                    IppValue::Keyword("1.1".to_string()),
+                ]),
             ),
             IppAttribute::new(
                 IppAttribute::OPERATIONS_SUPPORTED,
