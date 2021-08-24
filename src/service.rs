@@ -288,8 +288,11 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
                 .into())
             }
         }
-        let mut resp =
-            IppRequestResponse::new_response(self.version(), StatusCode::SuccessfulOk, req_id);
+        let mut resp = IppRequestResponse::new_response(
+            req.header().version,
+            StatusCode::SuccessfulOk,
+            req_id,
+        );
         self.add_basic_attributes(&mut resp);
         resp.attributes_mut().add(
             DelimiterTag::JobAttributes,
@@ -309,7 +312,7 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
 
     async fn validate_job(&self, req: IppRequestResponse) -> IppResult {
         let mut resp = IppRequestResponse::new_response(
-            self.version(),
+            req.header().version,
             StatusCode::SuccessfulOk,
             req.header().request_id,
         );
@@ -319,7 +322,7 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
 
     async fn cancel_job(&self, req: IppRequestResponse) -> IppResult {
         let mut resp = IppRequestResponse::new_response(
-            self.version(),
+            req.header().version,
             StatusCode::SuccessfulOk,
             req.header().request_id,
         );
@@ -329,7 +332,7 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
 
     async fn get_job_attributes(&self, req: IppRequestResponse) -> IppResult {
         let mut resp = IppRequestResponse::new_response(
-            self.version(),
+            req.header().version,
             StatusCode::SuccessfulOk,
             req.header().request_id,
         );
@@ -358,7 +361,7 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
 
     async fn get_printer_attributes(&self, req: IppRequestResponse) -> IppResult {
         let mut resp = IppRequestResponse::new_response(
-            self.version(),
+            req.header().version,
             StatusCode::SuccessfulOk,
             req.header().request_id,
         );

@@ -97,7 +97,17 @@ pub trait IppServerHandler: Send + Sync + 'static {
         IppVersion::v1_1()
     }
 
-    fn build_error_response(&self, req_id: u32, error: anyhow::Error) -> IppRequestResponse {
+    fn check_version(&self, req: &IppRequestResponse) -> bool {
+        let version = req.header().version.0;
+        return version <= self.version().0;
+    }
+
+    fn build_error_response(
+        &self,
+        version: IppVersion,
+        req_id: u32,
+        error: anyhow::Error,
+    ) -> IppRequestResponse {
         let ipp_error = match error.downcast_ref::<IppError>() {
             Some(e) => e.clone(),
             None => IppError {
@@ -105,7 +115,7 @@ pub trait IppServerHandler: Send + Sync + 'static {
                 msg: error.to_string(),
             },
         };
-        let mut resp = IppRequestResponse::new_response(self.version(), ipp_error.code, req_id);
+        let mut resp = IppRequestResponse::new_response(version, ipp_error.code, req_id);
         resp.attributes_mut().add(
             DelimiterTag::OperationAttributes,
             IppAttribute::new(
@@ -118,6 +128,18 @@ pub trait IppServerHandler: Send + Sync + 'static {
 
     async fn handle_request(&self, req: IppRequestResponse) -> IppRequestResponse {
         let req_id = req.header().request_id;
+        if !self.check_version(&req) {
+            return self.build_error_response(
+                self.version(),
+                req_id,
+                IppError {
+                    code: StatusCode::ServerErrorVersionNotSupported,
+                    msg: StatusCode::ServerErrorVersionNotSupported.to_string(),
+                }
+                .into(),
+            );
+        }
+        let version = req.header().version;
         match Operation::from_u16(req.header().operation_or_status) {
             Some(op) => match op {
                 Operation::PrintJob => self.print_job(req).await,
@@ -140,7 +162,7 @@ pub trait IppServerHandler: Send + Sync + 'static {
             },
             None => Err(operation_not_supported()),
         }
-        .unwrap_or_else(|error| self.build_error_response(req_id, error))
+        .unwrap_or_else(|error| self.build_error_response(version, req_id, error))
     }
 }
 
