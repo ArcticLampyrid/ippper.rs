@@ -92,7 +92,6 @@ pub trait IppServerHandler: Send + Sync + 'static {
         Err(operation_not_supported())
     }
 
-    #[inline]
     fn version(&self) -> IppVersion {
         IppVersion::v1_1()
     }

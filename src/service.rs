@@ -5,12 +5,13 @@ use anyhow;
 use async_compression::futures::bufread;
 use async_trait::async_trait;
 use ipp::attribute::IppAttribute;
-use ipp::model::{DelimiterTag, JobState, Operation, PrinterState, StatusCode};
+use ipp::model::{DelimiterTag, IppVersion, JobState, Operation, PrinterState, StatusCode};
 use ipp::payload::IppPayload;
 use ipp::request::IppRequestResponse;
 use ipp::value::IppValue;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::{Duration, Instant};
+use uuid::Uuid;
 
 #[async_trait]
 pub trait SimpleIppServiceHandler: Send + Sync + 'static {
@@ -28,7 +29,9 @@ pub struct PrinterInfo {
     pub name: String,
     pub info: Option<String>,
     pub make_and_model: Option<String>,
+    pub uuid: Option<Uuid>,
 }
+
 pub struct SimpleIppService<T: SimpleIppServiceHandler> {
     start_time: Instant,
     job_id: AtomicI32,
@@ -48,6 +51,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 name: "IppServer".to_string(),
                 info: Some("IppServer by ippper".to_string()),
                 make_and_model: Some("IppServer by ippper".to_string()),
+                uuid: None,
             },
             handler: handler,
             default_document_format: "application/pdf".to_string(),
@@ -120,6 +124,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 IppValue::Array(vec![
                     IppValue::Keyword("1.0".to_string()),
                     IppValue::Keyword("1.1".to_string()),
+                    IppValue::Keyword("2.0".to_string()),
                 ]),
             ),
             IppAttribute::new(
@@ -168,7 +173,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             ),
             IppAttribute::new(
                 IppAttribute::PDL_OVERRIDE_SUPPORTED,
-                IppValue::Keyword("not-attempted".to_string()),
+                IppValue::Keyword("attempted".to_string()),
             ),
             IppAttribute::new(
                 IppAttribute::PRINTER_UP_TIME,
@@ -193,6 +198,16 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 IppAttribute::PRINTER_MAKE_AND_MODEL,
                 IppValue::TextWithoutLanguage(make_and_model),
             ));
+        }
+        if let Some(uuid) = self.info.uuid {
+            r.push(IppAttribute::new(
+                "printer-uuid",
+                IppValue::Uri(
+                    uuid.to_urn()
+                        .encode_lower(&mut Uuid::encode_buffer())
+                        .to_string(),
+                ),
+            ))
         }
         r
     }
@@ -238,6 +253,9 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
 
 #[async_trait]
 impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
+    fn version(&self) -> IppVersion {
+        IppVersion::v2_0()
+    }
     async fn print_job(&self, mut req: IppRequestResponse) -> IppResult {
         let document_format_value = req
             .attributes()
