@@ -185,6 +185,33 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                     IppValue::Keyword("gzip".to_string()),
                 ]),
             ),
+            IppAttribute::new(
+                IppAttribute::MEDIA_DEFAULT,
+                IppValue::Keyword("iso_a4_210x297mm".to_string()),
+            ),
+            IppAttribute::new(
+                IppAttribute::MEDIA_SUPPORTED,
+                IppValue::Array(
+                    vec![
+                        "na_letter_8.5x11in".to_string(),
+                        "na_legal_8.5x14in".to_string(),
+                        "na_executive_7.25x10.5in".to_string(),
+                        "na_ledger_11x17in".to_string(),
+                        "iso_a3_297x420mm".to_string(),
+                        "iso_a4_210x297mm".to_string(),
+                        "iso_a5_148x210mm".to_string(),
+                        "jis_b5_182x257mm".to_string(),
+                        "iso_b5_176x250mm".to_string(),
+                        "na_number-10_4.125x9.5in".to_string(),
+                        "iso_c5_162x229mm".to_string(),
+                        "iso_dl_110x220mm".to_string(),
+                        "na_monarch_3.875x7.5in".to_string(),
+                    ]
+                    .iter()
+                    .map(|format| IppValue::Keyword(format.clone()))
+                    .collect::<Vec<_>>(),
+                ),
+            ),
         ];
         if let Some(info) = self.info.info.clone() {
             r.push(IppAttribute::new(
