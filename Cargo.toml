@@ -22,7 +22,7 @@ ipp = "3.0.0"
 num-traits = "0.2.14"
 thiserror = "1.0"
 tokio = {version = "1", features = ["full"]}
-tokio-util = {version = "0.6.7", features = ["io", "compat"]}
+tokio-util = {version = "0.6.8", features = ["io", "compat"]}
 uuid = "0.8.2"
 
 [[example]]
