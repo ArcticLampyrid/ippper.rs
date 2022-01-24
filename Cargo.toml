@@ -12,7 +12,7 @@ repository = "https://github.com/ArcticLampyrid/ippper.rs/"
 version = "0.2.1"
 
 [dependencies]
-anyhow = "1.0.51"
+anyhow = "1.0.53"
 async-compression = {version = "0.3.8", features = ["futures-io", "gzip"]}
 async-trait = "0.1.51"
 derive_builder = "0.10.2"
