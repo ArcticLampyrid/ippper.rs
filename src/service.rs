@@ -229,7 +229,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             r.push(IppAttribute::new(
                 "printer-uuid",
                 IppValue::Uri(
-                    uuid.to_urn()
+                    uuid.urn()
                         .encode_lower(&mut Uuid::encode_buffer())
                         .to_string(),
                 ),
