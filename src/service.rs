@@ -286,7 +286,7 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
     fn version(&self) -> IppVersion {
         IppVersion::v2_0()
     }
-    async fn print_job(&self, mut req: IppRequestResponse) -> IppResult {
+    async fn print_job(&self, req: IppRequestResponse) -> IppResult {
         let format = req
             .attributes()
             .groups_of(DelimiterTag::OperationAttributes)
