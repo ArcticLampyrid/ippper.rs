@@ -1,7 +1,8 @@
 use async_trait::async_trait;
-use ipp::payload::IppPayload;
 use ippper::server::IppServer;
-use ippper::service::{PrinterInfoBuilder, SimpleIppService, SimpleIppServiceHandler};
+use ippper::service::{
+    PrinterInfoBuilder, SimpleIppDocument, SimpleIppService, SimpleIppServiceHandler,
+};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use tokio::fs::File;
@@ -17,13 +18,9 @@ impl MyHandler {
 }
 #[async_trait]
 impl SimpleIppServiceHandler for MyHandler {
-    async fn handle_document(
-        &self,
-        _document_format: &str,
-        payload: &mut IppPayload,
-    ) -> anyhow::Result<()> {
+    async fn handle_document(&self, document: SimpleIppDocument) -> anyhow::Result<()> {
         let mut file = File::create("D:\\1.pdf").await?;
-        io::copy(&mut payload.compat(), &mut file).await?;
+        io::copy(&mut document.payload.compat(), &mut file).await?;
         Ok(())
     }
 }

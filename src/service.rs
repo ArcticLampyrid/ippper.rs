@@ -17,11 +17,15 @@ use uuid::Uuid;
 pub trait SimpleIppServiceHandler: Send + Sync + 'static {
     async fn handle_document(
         &self,
-        _document_format: &str,
-        _payload: &mut IppPayload,
+        _document: SimpleIppDocument,
     ) -> anyhow::Result<()> {
         Ok(())
     }
+}
+
+pub struct SimpleIppDocument {
+    pub format: Option<String>,
+    pub payload: IppPayload
 }
 
 #[derive(Debug, Clone, Builder)]
@@ -283,16 +287,17 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
         IppVersion::v2_0()
     }
     async fn print_job(&self, mut req: IppRequestResponse) -> IppResult {
-        let document_format_value = req
+        let format = req
             .attributes()
             .groups_of(DelimiterTag::OperationAttributes)
             .next()
             .and_then(|g| g.attributes().get(IppAttribute::JOB_ID))
-            .map(|attr| attr.value());
-        let document_format = match document_format_value {
-            Some(IppValue::MimeMediaType(x)) => x.clone(),
-            _ => self.default_document_format.clone(),
-        };
+            .map(|attr| attr.value())
+            .and_then(|attr| match attr {
+                IppValue::MimeMediaType(x) => Some(x.clone()),
+                _ => None,
+            });
+            
         let compression = req
             .attributes()
             .groups_of(DelimiterTag::OperationAttributes)
@@ -307,25 +312,34 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
             });
         let req_id = req.header().request_id;
         let version = req.header().version;
-        if !self.supported_document_formats.contains(&document_format) {
-            return Err(IppError {
-                code: StatusCode::ClientErrorDocumentFormatNotSupported,
-                msg: StatusCode::ClientErrorDocumentFormatNotSupported.to_string(),
+        match format {
+            Some(ref x) => if !self.supported_document_formats.contains(x) {
+                return Err(IppError {
+                    code: StatusCode::ClientErrorDocumentFormatNotSupported,
+                    msg: StatusCode::ClientErrorDocumentFormatNotSupported.to_string(),
+                }
+                .into());
             }
-            .into());
+            None => {}
         }
         match compression {
             None => {
                 self.handler
-                    .handle_document(document_format.as_ref(), req.payload_mut())
+                    .handle_document(SimpleIppDocument{
+                        format, 
+                        payload: req.into_payload()
+                    })
                     .await?
             }
             Some("gzip") => {
                 let raw_payload = req.into_payload();
                 let decoder = bufread::GzipDecoder::new(futures::io::BufReader::new(raw_payload));
-                let mut payload = IppPayload::new_async(decoder);
+                let payload = IppPayload::new_async(decoder);
                 self.handler
-                    .handle_document(document_format.as_ref(), &mut payload)
+                    .handle_document(SimpleIppDocument{
+                        format, 
+                        payload
+                    })
                     .await?
             }
             _ => {
