@@ -9,20 +9,20 @@ license = "BSD-3-Clause"
 name = "ippper"
 readme = "README.md"
 repository = "https://github.com/ArcticLampyrid/ippper.rs/"
-version = "0.2.1"
+version = "0.3.0"
 
 [dependencies]
-anyhow = "1.0.51"
-async-compression = {version = "0.3.8", features = ["futures-io", "gzip"]}
+anyhow = "1"
+async-compression = {version = "0.3", features = ["futures-io", "gzip"]}
 async-trait = "0.1.51"
 derive_builder = "0.10.2"
 futures = "0.3.17"
 hyper = {version = "0.14", features = ["http1", "server", "stream"]}
-ipp = "3.0.0"
+ipp = "3"
 num-traits = "0.2.14"
 thiserror = "1.0"
 tokio = {version = "1", features = ["rt-multi-thread", "macros"]}
-tokio-util = {version = "0.6.9", features = ["io", "compat"]}
+tokio-util = {version = "0.7", features = ["io", "compat"]}
 uuid = "0.8.2"
 
 [[example]]

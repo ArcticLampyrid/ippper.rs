@@ -306,6 +306,7 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
                 _ => None,
             });
         let req_id = req.header().request_id;
+        let version = req.header().version;
         if !self.supported_document_formats.contains(&document_format) {
             return Err(IppError {
                 code: StatusCode::ClientErrorDocumentFormatNotSupported,
@@ -320,7 +321,7 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
                     .await?
             }
             Some("gzip") => {
-                let raw_payload = std::mem::replace(req.payload_mut(), IppPayload::empty());
+                let raw_payload = req.into_payload();
                 let decoder = bufread::GzipDecoder::new(futures::io::BufReader::new(raw_payload));
                 let mut payload = IppPayload::new_async(decoder);
                 self.handler
@@ -336,7 +337,7 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
             }
         }
         let mut resp = IppRequestResponse::new_response(
-            req.header().version,
+            version,
             StatusCode::SuccessfulOk,
             req_id,
         );
