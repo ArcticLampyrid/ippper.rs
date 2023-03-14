@@ -13,16 +13,16 @@ version = "0.3.0"
 
 [dependencies]
 anyhow = "1"
-async-compression = {version = "0.3", features = ["futures-io", "gzip"]}
+async-compression = {version = "0.3", features = ["futures-io", "gzip"], default-features = false}
 async-trait = "0.1.57"
-derive_builder = "0.11"
+derive_builder = "0.12"
 futures = "0.3.17"
-hyper = {version = "0.14", features = ["http1", "server", "stream"]}
-ipp = "3"
+hyper = {version = "0.14", features = ["http1", "server", "stream"], default-features = false}
+ipp = "4"
 num-traits = "0.2.14"
 thiserror = "1.0"
-tokio = {version = "1", features = ["rt-multi-thread", "macros"]}
-tokio-util = {version = "0.7", features = ["io", "compat"]}
+tokio = {version = "1", features = ["rt-multi-thread", "macros"], default-features = false}
+tokio-util = {version = "0.7", features = ["io", "compat"], default-features = false}
 uuid = "1"
 
 [[example]]
