@@ -312,15 +312,14 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
             });
         let req_id = req.header().request_id;
         let version = req.header().version;
-        match format {
-            Some(ref x) => if !self.supported_document_formats.contains(x) {
+        if let Some(ref x) = format {
+            if !self.supported_document_formats.contains(x) {
                 return Err(IppError {
                     code: StatusCode::ClientErrorDocumentFormatNotSupported,
                     msg: StatusCode::ClientErrorDocumentFormatNotSupported.to_string(),
                 }
                 .into());
             }
-            None => {}
         }
         match compression {
             None => {
