@@ -17,7 +17,7 @@ async-compression = {version = "0.4", features = ["futures-io", "gzip"], default
 async-trait = "0.1"
 derive_builder = "0.12"
 futures = "0.3"
-hyper = {version = "0.14", features = ["http1", "server", "stream"], default-features = false}
+hyper = {version = "1.1", features = ["http1", "server", "stream"], default-features = false}
 ipp = "4"
 num-traits = "0.2"
 thiserror = "1.0"
