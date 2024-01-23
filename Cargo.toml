@@ -15,7 +15,7 @@ version = "0.3.0"
 anyhow = "1"
 async-compression = {version = "0.4", features = ["futures-io", "gzip"], default-features = false}
 async-trait = "0.1"
-derive_builder = "0.12"
+derive_builder = "0.13"
 futures = "0.3"
 hyper = {version = "0.14", features = ["http1", "server", "stream"], default-features = false}
 ipp = "4"
