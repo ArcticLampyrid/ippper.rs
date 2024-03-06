@@ -1,6 +1,6 @@
 use crate::error::IppError;
 use crate::result::IppResult;
-use crate::server::IppServerHandler;
+use crate::service::IppService;
 use anyhow;
 use async_compression::futures::bufread;
 use async_trait::async_trait;
@@ -15,17 +15,14 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait SimpleIppServiceHandler: Send + Sync + 'static {
-    async fn handle_document(
-        &self,
-        _document: SimpleIppDocument,
-    ) -> anyhow::Result<()> {
+    async fn handle_document(&self, _document: SimpleIppDocument) -> anyhow::Result<()> {
         Ok(())
     }
 }
 
 pub struct SimpleIppDocument {
     pub format: Option<String>,
-    pub payload: IppPayload
+    pub payload: IppPayload,
 }
 
 #[derive(Debug, Clone, Builder)]
@@ -282,7 +279,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
 }
 
 #[async_trait]
-impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
+impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
     fn version(&self) -> IppVersion {
         IppVersion::v2_0()
     }
@@ -297,7 +294,7 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
                 IppValue::MimeMediaType(x) => Some(x.clone()),
                 _ => None,
             });
-            
+
         let compression = req
             .attributes()
             .groups_of(DelimiterTag::OperationAttributes)
@@ -324,9 +321,9 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
         match compression {
             None => {
                 self.handler
-                    .handle_document(SimpleIppDocument{
-                        format, 
-                        payload: req.into_payload()
+                    .handle_document(SimpleIppDocument {
+                        format,
+                        payload: req.into_payload(),
                     })
                     .await?
             }
@@ -335,10 +332,7 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
                 let decoder = bufread::GzipDecoder::new(futures::io::BufReader::new(raw_payload));
                 let payload = IppPayload::new_async(decoder);
                 self.handler
-                    .handle_document(SimpleIppDocument{
-                        format, 
-                        payload
-                    })
+                    .handle_document(SimpleIppDocument { format, payload })
                     .await?
             }
             _ => {
@@ -349,11 +343,7 @@ impl<T: SimpleIppServiceHandler> IppServerHandler for SimpleIppService<T> {
                 .into())
             }
         }
-        let mut resp = IppRequestResponse::new_response(
-            version,
-            StatusCode::SuccessfulOk,
-            req_id,
-        );
+        let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
         self.add_basic_attributes(&mut resp);
         resp.attributes_mut().add(
             DelimiterTag::JobAttributes,

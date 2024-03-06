@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use ippper::server::IppServer;
-use ippper::service::{
+use ippper::server::serve_ipp;
+use ippper::service::simple::{
     PrinterInfoBuilder, SimpleIppDocument, SimpleIppService, SimpleIppServiceHandler,
 };
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -26,10 +26,10 @@ impl SimpleIppServiceHandler for MyHandler {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 631);
-    let mut ipp_handler = SimpleIppService::new(MyHandler::new());
-    ipp_handler.set_info(
+    let mut ipp_service = SimpleIppService::new(MyHandler::new());
+    ipp_service.set_info(
         PrinterInfoBuilder::default()
             .uuid(Some(
                 // Change it if you are building a ipp service
@@ -39,7 +39,5 @@ async fn main() {
             .build()
             .unwrap(),
     );
-    if let Err(e) = IppServer::serve(addr, Arc::new(ipp_handler)).await {
-        eprintln!("server error: {}", e);
-    }
+    serve_ipp(addr, Arc::new(ipp_service)).await
 }
