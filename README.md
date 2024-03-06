@@ -5,7 +5,7 @@
 [![BSD 3 Clause licensed](https://img.shields.io/badge/license-BSD%203%20Clause-blue)](./LICENSE.md)
 
 A library for building simple ipp servers.  
-A **very basic** implementation of ipp is provided as `ippper::service::SimpleIppService`. This is very basic, but enough to fool Android Printer Service.
+A **very basic** implementation of ipp is provided as `ippper::service::SimpleIppService`. This is very basic, but enough to fool Android Printer Service & Windows Print Spooler.
 
 - Easy to use
 - Asynchronous design
