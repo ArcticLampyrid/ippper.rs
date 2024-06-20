@@ -1,6 +1,7 @@
 use crate::error::IppError;
 use crate::result::IppResult;
 use crate::service::IppService;
+use crate::utils::get_ipp_attribute;
 use anyhow;
 use async_compression::futures::bufread;
 use ipp::attribute::IppAttribute;
@@ -284,29 +285,13 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         IppVersion::v2_0()
     }
     async fn print_job(&self, req: IppRequestResponse) -> IppResult {
-        let format = req
-            .attributes()
-            .groups_of(DelimiterTag::OperationAttributes)
-            .next()
-            .and_then(|g| g.attributes().get(IppAttribute::JOB_ID))
-            .map(|attr| attr.value())
-            .and_then(|attr| match attr {
-                IppValue::MimeMediaType(x) => Some(x.clone()),
-                _ => None,
-            });
-
-        let compression = req
-            .attributes()
-            .groups_of(DelimiterTag::OperationAttributes)
-            .next()
-            .and_then(|g| g.attributes().get("compression"))
-            .and_then(|attr| match attr.value() {
-                IppValue::Keyword(x) => match x.as_ref() {
-                    "none" => None,
-                    x_ref => Some(x_ref),
-                },
-                _ => None,
-            });
+        let format = get_ipp_attribute(
+            req.attributes(),
+            DelimiterTag::OperationAttributes,
+            "document-format",
+        )
+        .and_then(|attr| attr.as_mime_media_type())
+        .cloned();
         let req_id = req.header().request_id;
         let version = req.header().version;
         if let Some(ref x) = format {
@@ -318,6 +303,21 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
                 .into());
             }
         }
+        let media = get_ipp_attribute(req.attributes(), DelimiterTag::JobAttributes, "media")
+            .and_then(|attr| attr.as_keyword())
+            .cloned();
+        let compression = get_ipp_attribute(
+            req.attributes(),
+            DelimiterTag::OperationAttributes,
+            "compression",
+        )
+        .and_then(|attr| match attr {
+            IppValue::Keyword(x) => match x.as_ref() {
+                "none" => None,
+                x_ref => Some(x_ref),
+            },
+            _ => None,
+        });
         match compression {
             None => {
                 self.handler
@@ -387,14 +387,14 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             StatusCode::SuccessfulOk,
             req.header().request_id,
         );
-        let job_id_value = req
-            .attributes()
-            .groups_of(DelimiterTag::OperationAttributes)
-            .next()
-            .and_then(|g| g.attributes().get(IppAttribute::JOB_ID))
-            .map(|attr| attr.value());
-        match job_id_value {
-            Some(IppValue::Integer(job_id)) => {
+        let job_id = get_ipp_attribute(
+            req.attributes(),
+            DelimiterTag::OperationAttributes,
+            IppAttribute::JOB_ID,
+        )
+        .and_then(|attr| attr.as_integer());
+        match job_id {
+            Some(job_id) => {
                 self.add_basic_attributes(&mut resp);
                 let job_attributes = self.job_attributes(
                     *job_id,
@@ -417,18 +417,17 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             req.header().request_id,
         );
         self.add_basic_attributes(&mut resp);
-        let optional_requested_attributes = req
-            .attributes()
-            .groups_of(DelimiterTag::OperationAttributes)
-            .next()
-            .and_then(|g| g.attributes().get(IppAttribute::REQUESTED_ATTRIBUTES))
-            .map(|attr| {
-                attr.value()
-                    .into_iter()
-                    .filter_map(|e| e.as_keyword())
-                    .map(|e| e.as_ref())
-                    .collect::<Vec<_>>()
-            });
+        let optional_requested_attributes = get_ipp_attribute(
+            req.attributes(),
+            DelimiterTag::OperationAttributes,
+            IppAttribute::REQUESTED_ATTRIBUTES,
+        )
+        .map(|attr| {
+            attr.into_iter()
+                .filter_map(|e| e.as_keyword())
+                .map(|e| e.as_ref())
+                .collect::<Vec<_>>()
+        });
         let printer_attributes = optional_requested_attributes.map_or(
             self.printer_attributes(),
             |requested_attributes| {
