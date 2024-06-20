@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use ippper::server::serve_ipp;
 use ippper::service::simple::{
     PrinterInfoBuilder, SimpleIppDocument, SimpleIppService, SimpleIppServiceHandler,
@@ -16,12 +15,17 @@ impl MyHandler {
         Self {}
     }
 }
-#[async_trait]
+
 impl SimpleIppServiceHandler for MyHandler {
-    async fn handle_document(&self, document: SimpleIppDocument) -> anyhow::Result<()> {
-        let mut file = File::create("D:\\1.pdf").await?;
-        io::copy(&mut document.payload.compat(), &mut file).await?;
-        Ok(())
+    fn handle_document(
+        &self,
+        document: SimpleIppDocument,
+    ) -> impl futures::Future<Output = anyhow::Result<()>> + Send {
+        async move {
+            let mut file = File::create("D:\\1.pdf").await?;
+            io::copy(&mut document.payload.compat(), &mut file).await?;
+            Ok(())
+        }
     }
 }
 

@@ -3,7 +3,6 @@ use crate::result::IppResult;
 use crate::service::IppService;
 use anyhow;
 use async_compression::futures::bufread;
-use async_trait::async_trait;
 use ipp::attribute::IppAttribute;
 use ipp::model::{DelimiterTag, IppVersion, JobState, Operation, PrinterState, StatusCode};
 use ipp::payload::IppPayload;
@@ -13,10 +12,12 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-#[async_trait]
 pub trait SimpleIppServiceHandler: Send + Sync + 'static {
-    async fn handle_document(&self, _document: SimpleIppDocument) -> anyhow::Result<()> {
-        Ok(())
+    fn handle_document(
+        &self,
+        _document: SimpleIppDocument,
+    ) -> impl futures::Future<Output = anyhow::Result<()>> + Send {
+        futures::future::ready(Ok(()))
     }
 }
 
@@ -278,7 +279,6 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
     }
 }
 
-#[async_trait]
 impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
     fn version(&self) -> IppVersion {
         IppVersion::v2_0()
