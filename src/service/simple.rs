@@ -1,7 +1,8 @@
 use crate::error::IppError;
+use crate::model::{PageOrientation, Resolution};
 use crate::result::IppResult;
 use crate::service::IppService;
-use crate::utils::get_ipp_attribute;
+use crate::utils::{get_ipp_attribute, remove_ipp_attribute};
 use anyhow;
 use async_compression::futures::bufread;
 use ipp::attribute::IppAttribute;
@@ -24,19 +25,51 @@ pub trait SimpleIppServiceHandler: Send + Sync {
 
 pub struct SimpleIppDocument {
     pub format: Option<String>,
+    pub media: Option<String>,
+    pub orientation: Option<PageOrientation>,
+    pub sides: Option<String>,
+    pub print_color_mode: Option<String>,
+    pub printer_resolution: Option<Resolution>,
+
     pub payload: IppPayload,
 }
 
 #[derive(Debug, Clone, Builder)]
 pub struct PrinterInfo {
     #[builder(default = r#""IppServer".to_string()"#)]
-    pub name: String,
+    name: String,
     #[builder(default = r#"Some("IppServer by ippper".to_string())"#)]
-    pub info: Option<String>,
+    info: Option<String>,
     #[builder(default = r#"Some("IppServer by ippper".to_string())"#)]
-    pub make_and_model: Option<String>,
+    make_and_model: Option<String>,
     #[builder(default = r#"None"#)]
-    pub uuid: Option<Uuid>,
+    uuid: Option<Uuid>,
+    #[builder(default = r#"vec!["application/pdf".to_string()]"#)]
+    document_formats_supported: Vec<String>,
+    #[builder(default = r#""application/pdf".to_string()"#)]
+    document_format_default: String,
+    #[builder(default = r#"Some("application/pdf".to_string())"#)]
+    document_format_preferred: Option<String>,
+    #[builder(default = r#"vec!["iso_a4_210x297mm".to_string()]"#)]
+    media_supported: Vec<String>,
+    #[builder(default = r#""iso_a4_210x297mm".to_string()"#)]
+    media_default: String,
+    #[builder(default = r#"vec![PageOrientation::Portrait]"#)]
+    orientation_supported: Vec<PageOrientation>,
+    #[builder(default = r#"None"#)]
+    orientation_default: Option<PageOrientation>,
+    #[builder(default = r#"vec!["one-sided".to_string()]"#)]
+    side_supported: Vec<String>,
+    #[builder(default = r#""one-sided".to_string()"#)]
+    side_default: String,
+    #[builder(default = r#"vec!["monochrome".to_string(), "color".to_string()]"#)]
+    print_color_mode_supported: Vec<String>,
+    #[builder(default = r#""monochrome".to_string()"#)]
+    print_color_mode_default: String,
+    #[builder(default = r#"None"#)]
+    printer_resolution_supported: Option<Vec<Resolution>>,
+    #[builder(default = r#"None"#)]
+    printer_resolution_default: Option<Resolution>,
 }
 
 pub struct SimpleIppService<T: SimpleIppServiceHandler> {
@@ -44,20 +77,16 @@ pub struct SimpleIppService<T: SimpleIppServiceHandler> {
     job_id: AtomicI32,
     host: String,
     info: PrinterInfo,
-    default_document_format: String,
-    supported_document_formats: Vec<String>,
     handler: T,
 }
 impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
-    pub fn new(handler: T) -> Self {
+    pub fn new(info: PrinterInfo, handler: T) -> Self {
         Self {
             start_time: Instant::now(),
             job_id: AtomicI32::new(1000),
             host: "defaulthost:631".to_string(),
-            info: PrinterInfoBuilder::default().build().unwrap(),
+            info,
             handler,
-            default_document_format: "application/pdf".to_string(),
-            supported_document_formats: vec!["application/pdf".to_string()],
         }
     }
     pub fn set_host(&mut self, host: &str) {
@@ -65,19 +94,6 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
     }
     pub fn set_info(&mut self, info: PrinterInfo) {
         self.info = info;
-    }
-    pub fn set_document_format(
-        &mut self,
-        supported_document_formats: Vec<String>,
-        default_document_format: String,
-    ) {
-        self.supported_document_formats = supported_document_formats;
-        self.default_document_format = default_document_format;
-        assert!(
-            self.supported_document_formats
-                .contains(&self.default_document_format),
-            "default document format is out of supported document formats"
-        );
     }
     fn add_basic_attributes(&self, resp: &mut IppRequestResponse) {
         resp.attributes_mut().add(
@@ -158,12 +174,13 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             ),
             IppAttribute::new(
                 IppAttribute::DOCUMENT_FORMAT_DEFAULT,
-                IppValue::MimeMediaType(self.default_document_format.clone()),
+                IppValue::MimeMediaType(self.info.document_format_default.clone()),
             ),
             IppAttribute::new(
                 IppAttribute::DOCUMENT_FORMAT_SUPPORTED,
                 IppValue::Array(
-                    self.supported_document_formats
+                    self.info
+                        .document_formats_supported
                         .iter()
                         .map(|format| IppValue::MimeMediaType(format.clone()))
                         .collect::<Vec<_>>(),
@@ -190,32 +207,104 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             ),
             IppAttribute::new(
                 IppAttribute::MEDIA_DEFAULT,
-                IppValue::Keyword("iso_a4_210x297mm".to_string()),
+                IppValue::Keyword(self.info.media_default.clone()),
             ),
             IppAttribute::new(
                 IppAttribute::MEDIA_SUPPORTED,
                 IppValue::Array(
-                    vec![
-                        "na_letter_8.5x11in".to_string(),
-                        "na_legal_8.5x14in".to_string(),
-                        "na_executive_7.25x10.5in".to_string(),
-                        "na_ledger_11x17in".to_string(),
-                        "iso_a3_297x420mm".to_string(),
-                        "iso_a4_210x297mm".to_string(),
-                        "iso_a5_148x210mm".to_string(),
-                        "jis_b5_182x257mm".to_string(),
-                        "iso_b5_176x250mm".to_string(),
-                        "na_number-10_4.125x9.5in".to_string(),
-                        "iso_c5_162x229mm".to_string(),
-                        "iso_dl_110x220mm".to_string(),
-                        "na_monarch_3.875x7.5in".to_string(),
-                    ]
-                    .iter()
-                    .map(|format| IppValue::Keyword(format.clone()))
-                    .collect::<Vec<_>>(),
+                    self.info
+                        .media_supported
+                        .iter()
+                        .map(|media| IppValue::Keyword(media.clone()))
+                        .collect::<Vec<_>>(),
+                ),
+            ),
+            IppAttribute::new(
+                IppAttribute::ORIENTATION_REQUESTED_DEFAULT,
+                self.info
+                    .orientation_default
+                    .map(|orientation| orientation.into())
+                    .unwrap_or(IppValue::NoValue),
+            ),
+            IppAttribute::new(
+                IppAttribute::ORIENTATION_REQUESTED_SUPPORTED,
+                IppValue::Array(
+                    self.info
+                        .orientation_supported
+                        .iter()
+                        .map(|orientation| (*orientation).into())
+                        .collect::<Vec<_>>(),
+                ),
+            ),
+            IppAttribute::new(
+                IppAttribute::SIDES_DEFAULT,
+                IppValue::Keyword(self.info.side_default.clone()),
+            ),
+            IppAttribute::new(
+                IppAttribute::SIDES_SUPPORTED,
+                IppValue::Array(
+                    self.info
+                        .side_supported
+                        .iter()
+                        .map(|side| IppValue::Keyword(side.clone()))
+                        .collect::<Vec<_>>(),
+                ),
+            ),
+            IppAttribute::new(
+                IppAttribute::PRINT_COLOR_MODE_DEFAULT,
+                IppValue::Keyword(self.info.print_color_mode_default.clone()),
+            ),
+            IppAttribute::new(
+                IppAttribute::PRINT_COLOR_MODE_SUPPORTED,
+                IppValue::Array(
+                    self.info
+                        .print_color_mode_supported
+                        .iter()
+                        .map(|mode| IppValue::Keyword(mode.clone()))
+                        .collect::<Vec<_>>(),
                 ),
             ),
         ];
+        if let Some(preferred) = self.info.document_format_preferred.clone() {
+            r.push(IppAttribute::new(
+                "document-format-preferred",
+                IppValue::MimeMediaType(preferred),
+            ));
+        }
+        if let Some(ref supported) = self.info.printer_resolution_supported {
+            r.push(IppAttribute::new(
+                IppAttribute::PRINTER_RESOLUTION_SUPPORTED,
+                IppValue::Array(
+                    supported
+                        .iter()
+                        .map(|resolution| IppValue::from(*resolution))
+                        .collect::<Vec<_>>(),
+                ),
+            ));
+        }
+        if let Some(default) = self.info.printer_resolution_default {
+            r.push(IppAttribute::new(
+                IppAttribute::PRINTER_RESOLUTION_DEFAULT,
+                default.into(),
+            ));
+        }
+
+        let mut job_creation_attributes_supported = vec![
+            IppValue::Keyword("job-name".to_string()),
+            IppValue::Keyword("media".to_string()),
+            IppValue::Keyword("orientation-requested".to_string()),
+            IppValue::Keyword("print-color-mode".to_string()),
+            IppValue::Keyword("sides".to_string()),
+        ];
+        if self.info.printer_resolution_supported.is_some() {
+            job_creation_attributes_supported
+                .push(IppValue::Keyword("printer-resolution".to_string()));
+        }
+        r.push(IppAttribute::new(
+            "job-creation-attributes-supported",
+            IppValue::Array(job_creation_attributes_supported),
+        ));
+
         if let Some(info) = self.info.info.clone() {
             r.push(IppAttribute::new(
                 IppAttribute::PRINTER_INFO,
@@ -284,18 +373,24 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
     fn version(&self) -> IppVersion {
         IppVersion::v2_0()
     }
-    async fn print_job(&self, req: IppRequestResponse) -> IppResult {
-        let format = get_ipp_attribute(
-            req.attributes(),
+    async fn print_job(&self, mut req: IppRequestResponse) -> IppResult {
+        // Take the attributes from the request, leaving an empty set of attributes
+        // in the request. This will avoid the need to clone the attributes.
+        let mut attributes = std::mem::take(req.attributes_mut());
+
+        let req_id = req.header().request_id;
+        let version = req.header().version;
+
+        let format = remove_ipp_attribute(
+            &mut attributes,
             DelimiterTag::OperationAttributes,
             "document-format",
         )
-        .and_then(|attr| attr.as_mime_media_type())
-        .cloned();
-        let req_id = req.header().request_id;
-        let version = req.header().version;
+        .and_then(|attr| attr.into_mime_media_type().ok());
+
+        // Check if the requested document format is supported
         if let Some(ref x) = format {
-            if !self.supported_document_formats.contains(x) {
+            if !self.info.document_formats_supported.contains(x) {
                 return Err(IppError {
                     code: StatusCode::ClientErrorDocumentFormatNotSupported,
                     msg: StatusCode::ClientErrorDocumentFormatNotSupported.to_string(),
@@ -303,37 +398,56 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
                 .into());
             }
         }
-        let media = get_ipp_attribute(req.attributes(), DelimiterTag::JobAttributes, "media")
-            .and_then(|attr| attr.as_keyword())
-            .cloned();
-        let compression = get_ipp_attribute(
-            req.attributes(),
+
+        let media = remove_ipp_attribute(&mut attributes, DelimiterTag::JobAttributes, "media")
+            .and_then(|attr| attr.into_keyword().ok());
+
+        let orientation = remove_ipp_attribute(
+            &mut attributes,
+            DelimiterTag::JobAttributes,
+            "orientation-requested",
+        )
+        .and_then(|attr| PageOrientation::try_from(attr).ok());
+
+        let sides = remove_ipp_attribute(&mut attributes, DelimiterTag::JobAttributes, "sides")
+            .and_then(|attr| attr.into_keyword().ok());
+
+        let print_color_mode = remove_ipp_attribute(
+            &mut attributes,
+            DelimiterTag::JobAttributes,
+            "print-color-mode",
+        )
+        .and_then(|attr| attr.into_keyword().ok());
+
+        let printer_resolution = remove_ipp_attribute(
+            &mut attributes,
+            DelimiterTag::JobAttributes,
+            "printer-resolution",
+        )
+        .and_then(|attr| Resolution::try_from(attr).ok());
+
+        let compression = remove_ipp_attribute(
+            &mut attributes,
             DelimiterTag::OperationAttributes,
             "compression",
         )
         .and_then(|attr| match attr {
-            IppValue::Keyword(x) => match x.as_ref() {
-                "none" => None,
-                x_ref => Some(x_ref),
-            },
+            IppValue::Keyword(x) => {
+                if x == "none" {
+                    None
+                } else {
+                    Some(x)
+                }
+            }
             _ => None,
         });
-        match compression {
-            None => {
-                self.handler
-                    .handle_document(SimpleIppDocument {
-                        format,
-                        payload: req.into_payload(),
-                    })
-                    .await?
-            }
+
+        let payload = match compression.as_deref() {
+            None => req.into_payload(),
             Some("gzip") => {
                 let raw_payload = req.into_payload();
                 let decoder = bufread::GzipDecoder::new(futures::io::BufReader::new(raw_payload));
-                let payload = IppPayload::new_async(decoder);
-                self.handler
-                    .handle_document(SimpleIppDocument { format, payload })
-                    .await?
+                IppPayload::new_async(decoder)
             }
             _ => {
                 return Err(IppError {
@@ -342,7 +456,18 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
                 }
                 .into())
             }
-        }
+        };
+        self.handler
+            .handle_document(SimpleIppDocument {
+                format,
+                media,
+                orientation,
+                sides,
+                print_color_mode,
+                printer_resolution,
+                payload,
+            })
+            .await?;
         let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
         self.add_basic_attributes(&mut resp);
         resp.attributes_mut().add(
