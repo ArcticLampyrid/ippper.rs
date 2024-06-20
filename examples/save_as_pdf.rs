@@ -30,7 +30,7 @@ impl SimpleIppServiceHandler for MyHandler {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> anyhow::Result<()> {
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 631);
     let mut ipp_service = SimpleIppService::new(MyHandler::new());
     ipp_service.set_info(

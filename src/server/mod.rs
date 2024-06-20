@@ -8,8 +8,8 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 pub async fn serve_ipp(
     addr: SocketAddr,
-    ipp_service: Arc<impl IppService>,
-) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ipp_service: Arc<impl IppService + 'static>,
+) -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await?;
     loop {
         let (stream, _) = listener.accept().await?;

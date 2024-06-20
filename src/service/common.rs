@@ -14,7 +14,7 @@ fn operation_not_supported() -> anyhow::Error {
     })
 }
 
-pub trait IppService: Send + Sync + 'static {
+pub trait IppService: Send + Sync {
     fn print_job(
         &self,
         _req: IppRequestResponse,

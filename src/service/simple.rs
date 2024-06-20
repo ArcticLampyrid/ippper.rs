@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-pub trait SimpleIppServiceHandler: Send + Sync + 'static {
+pub trait SimpleIppServiceHandler: Send + Sync {
     fn handle_document(
         &self,
         _document: SimpleIppDocument,
