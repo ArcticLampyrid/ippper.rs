@@ -73,6 +73,18 @@ pub struct PrinterInfo {
     printer_resolution_supported: Option<Vec<Resolution>>,
     #[builder(default = r#"None"#)]
     printer_resolution_default: Option<Resolution>,
+    #[builder(default = r#"Some(vec![
+        "adobe-1.2".to_string(),
+        "adobe-1.3".to_string(),
+        "adobe-1.4".to_string(),
+        "adobe-1.5".to_string(),
+        "adobe-1.6".to_string(),
+        "adobe-1.7".to_string(),
+        "iso-19005-1_2005".to_string(),
+        "iso-32000-1_2008".to_string(),
+        "pwg-5102.3".to_string(),
+    ])"#)]
+    pdf_versions_supported: Option<Vec<String>>,
 }
 
 pub struct SimpleIppService<T: SimpleIppServiceHandler> {
@@ -319,6 +331,17 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         optional_add_if_requested!(
             IppAttribute::PRINTER_RESOLUTION_DEFAULT,
             self.info.printer_resolution_default.map(IppValue::from)
+        );
+        optional_add_if_requested!(
+            "pdf-versions-supported",
+            self.info.pdf_versions_supported.clone().map(|versions| {
+                IppValue::Array(
+                    versions
+                        .into_iter()
+                        .map(IppValue::Keyword)
+                        .collect::<Vec<_>>(),
+                )
+            })
         );
         if is_requested!("job-creation-attributes-supported") {
             let mut job_creation_attributes_supported = vec![
