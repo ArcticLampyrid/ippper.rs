@@ -530,8 +530,8 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let job_id = self.job_id.fetch_add(1, Ordering::Relaxed);
         let job_attributes = self.job_attributes(
             job_id,
-            JobState::Processing,
-            IppValue::Keyword("completed-successfully".to_string()),
+            JobState::Completed,
+            IppValue::Keyword("none".to_string()),
         );
         for attr in job_attributes {
             resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
