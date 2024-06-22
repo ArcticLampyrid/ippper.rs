@@ -10,6 +10,7 @@ use ipp::model::{DelimiterTag, IppVersion, JobState, Operation, PrinterState, St
 use ipp::payload::IppPayload;
 use ipp::request::IppRequestResponse;
 use ipp::value::IppValue;
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
@@ -113,222 +114,250 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             ),
         );
     }
-    fn printer_attributes(&self) -> Vec<IppAttribute> {
-        let mut r = vec![
-            IppAttribute::new(
-                IppAttribute::PRINTER_URI_SUPPORTED,
-                IppValue::Uri(format!("ipp://{}/printer", self.host)),
-            ),
-            IppAttribute::new(
-                IppAttribute::URI_AUTHENTICATION_SUPPORTED,
-                IppValue::Keyword("none".to_string()),
-            ),
-            IppAttribute::new(
-                IppAttribute::URI_SECURITY_SUPPORTED,
-                IppValue::Keyword("none".to_string()),
-            ),
-            IppAttribute::new(
-                IppAttribute::PRINTER_NAME,
-                IppValue::NameWithoutLanguage(self.info.name.clone()),
-            ),
-            IppAttribute::new(
-                IppAttribute::PRINTER_STATE,
-                IppValue::Enum(PrinterState::Idle as i32),
-            ),
-            IppAttribute::new(
-                IppAttribute::PRINTER_STATE_REASONS,
-                IppValue::Keyword("none".to_string()),
-            ),
-            IppAttribute::new(
-                IppAttribute::IPP_VERSIONS_SUPPORTED,
-                IppValue::Array(vec![
-                    IppValue::Keyword("1.0".to_string()),
-                    IppValue::Keyword("1.1".to_string()),
-                    IppValue::Keyword("2.0".to_string()),
-                ]),
-            ),
-            IppAttribute::new(
-                IppAttribute::OPERATIONS_SUPPORTED,
-                IppValue::Array(vec![
-                    IppValue::Enum(Operation::PrintJob as i32),
-                    IppValue::Enum(Operation::ValidateJob as i32),
-                    IppValue::Enum(Operation::CancelJob as i32),
-                    IppValue::Enum(Operation::GetJobAttributes as i32),
-                    IppValue::Enum(Operation::GetPrinterAttributes as i32),
-                ]),
-            ),
-            IppAttribute::new("multiple-document-jobs-supported", IppValue::Boolean(false)),
-            IppAttribute::new(
-                IppAttribute::CHARSET_CONFIGURED,
-                IppValue::Charset("utf-8".to_string()),
-            ),
-            IppAttribute::new(
-                IppAttribute::CHARSET_SUPPORTED,
-                IppValue::Charset("utf-8".to_string()),
-            ),
-            IppAttribute::new(
-                IppAttribute::NATURAL_LANGUAGE_CONFIGURED,
-                IppValue::NaturalLanguage("en".to_string()),
-            ),
-            IppAttribute::new(
-                IppAttribute::GENERATED_NATURAL_LANGUAGE_SUPPORTED,
-                IppValue::NaturalLanguage("en".to_string()),
-            ),
-            IppAttribute::new(
-                IppAttribute::DOCUMENT_FORMAT_DEFAULT,
-                IppValue::MimeMediaType(self.info.document_format_default.clone()),
-            ),
-            IppAttribute::new(
-                IppAttribute::DOCUMENT_FORMAT_SUPPORTED,
-                IppValue::Array(
-                    self.info
-                        .document_formats_supported
-                        .iter()
-                        .map(|format| IppValue::MimeMediaType(format.clone()))
-                        .collect::<Vec<_>>(),
-                ),
-            ),
-            IppAttribute::new(
-                IppAttribute::PRINTER_IS_ACCEPTING_JOBS,
-                IppValue::Boolean(true),
-            ),
-            IppAttribute::new(
-                IppAttribute::PDL_OVERRIDE_SUPPORTED,
-                IppValue::Keyword("attempted".to_string()),
-            ),
-            IppAttribute::new(
-                IppAttribute::PRINTER_UP_TIME,
-                IppValue::Integer(self.uptime().as_secs() as i32),
-            ),
-            IppAttribute::new(
-                IppAttribute::COMPRESSION_SUPPORTED,
-                IppValue::Array(vec![
-                    IppValue::Keyword("none".to_string()),
-                    IppValue::Keyword("gzip".to_string()),
-                ]),
-            ),
-            IppAttribute::new(
-                IppAttribute::MEDIA_DEFAULT,
-                IppValue::Keyword(self.info.media_default.clone()),
-            ),
-            IppAttribute::new(
-                IppAttribute::MEDIA_SUPPORTED,
-                IppValue::Array(
-                    self.info
-                        .media_supported
-                        .iter()
-                        .map(|media| IppValue::Keyword(media.clone()))
-                        .collect::<Vec<_>>(),
-                ),
-            ),
-            IppAttribute::new(
-                IppAttribute::ORIENTATION_REQUESTED_DEFAULT,
+    fn printer_attributes(&self, requested: Option<&HashSet<&str>>) -> Vec<IppAttribute> {
+        let mut r = Vec::<IppAttribute>::new();
+
+        macro_rules! is_requested {
+            ($name:expr) => {
+                requested.map_or(true, |x| x.contains($name))
+            };
+        }
+        macro_rules! add_if_requested {
+            ($name:expr, $value:expr) => {
+                if is_requested!($name) {
+                    r.push(IppAttribute::new($name, $value));
+                }
+            };
+        }
+        macro_rules! optional_add_if_requested {
+            ($name:expr, $value:expr) => {
+                if is_requested!($name) {
+                    if let Some(value) = $value {
+                        r.push(IppAttribute::new($name, value));
+                    }
+                }
+            };
+        }
+
+        add_if_requested!(
+            IppAttribute::PRINTER_URI_SUPPORTED,
+            IppValue::Uri(format!("ipp://{}/printer", self.host))
+        );
+        add_if_requested!(
+            IppAttribute::URI_AUTHENTICATION_SUPPORTED,
+            IppValue::Keyword("none".to_string())
+        );
+        add_if_requested!(
+            IppAttribute::URI_SECURITY_SUPPORTED,
+            IppValue::Keyword("none".to_string())
+        );
+        add_if_requested!(
+            IppAttribute::PRINTER_NAME,
+            IppValue::NameWithoutLanguage(self.info.name.clone())
+        );
+        add_if_requested!(
+            IppAttribute::PRINTER_STATE,
+            IppValue::Enum(PrinterState::Idle as i32)
+        );
+        add_if_requested!(
+            IppAttribute::PRINTER_STATE_REASONS,
+            IppValue::Keyword("none".to_string())
+        );
+        add_if_requested!(
+            IppAttribute::IPP_VERSIONS_SUPPORTED,
+            IppValue::Array(vec![
+                IppValue::Keyword("1.0".to_string()),
+                IppValue::Keyword("1.1".to_string()),
+                IppValue::Keyword("2.0".to_string()),
+            ])
+        );
+        add_if_requested!(
+            IppAttribute::OPERATIONS_SUPPORTED,
+            IppValue::Array(vec![
+                IppValue::Enum(Operation::PrintJob as i32),
+                IppValue::Enum(Operation::ValidateJob as i32),
+                IppValue::Enum(Operation::CancelJob as i32),
+                IppValue::Enum(Operation::GetJobAttributes as i32),
+                IppValue::Enum(Operation::GetPrinterAttributes as i32),
+            ])
+        );
+        add_if_requested!("multiple-document-jobs-supported", IppValue::Boolean(false));
+        add_if_requested!(
+            IppAttribute::CHARSET_CONFIGURED,
+            IppValue::Charset("utf-8".to_string())
+        );
+        add_if_requested!(
+            IppAttribute::CHARSET_SUPPORTED,
+            IppValue::Charset("utf-8".to_string())
+        );
+        add_if_requested!(
+            IppAttribute::NATURAL_LANGUAGE_CONFIGURED,
+            IppValue::NaturalLanguage("en".to_string())
+        );
+        add_if_requested!(
+            IppAttribute::GENERATED_NATURAL_LANGUAGE_SUPPORTED,
+            IppValue::NaturalLanguage("en".to_string())
+        );
+        add_if_requested!(
+            IppAttribute::DOCUMENT_FORMAT_DEFAULT,
+            IppValue::MimeMediaType(self.info.document_format_default.clone())
+        );
+        add_if_requested!(
+            IppAttribute::DOCUMENT_FORMAT_SUPPORTED,
+            IppValue::Array(
                 self.info
-                    .orientation_default
-                    .map(|orientation| orientation.into())
-                    .unwrap_or(IppValue::NoValue),
-            ),
-            IppAttribute::new(
-                IppAttribute::ORIENTATION_REQUESTED_SUPPORTED,
-                IppValue::Array(
-                    self.info
-                        .orientation_supported
-                        .iter()
-                        .map(|orientation| (*orientation).into())
-                        .collect::<Vec<_>>(),
-                ),
-            ),
-            IppAttribute::new(
-                IppAttribute::SIDES_DEFAULT,
-                IppValue::Keyword(self.info.side_default.clone()),
-            ),
-            IppAttribute::new(
-                IppAttribute::SIDES_SUPPORTED,
-                IppValue::Array(
-                    self.info
-                        .side_supported
-                        .iter()
-                        .map(|side| IppValue::Keyword(side.clone()))
-                        .collect::<Vec<_>>(),
-                ),
-            ),
-            IppAttribute::new(
-                IppAttribute::PRINT_COLOR_MODE_DEFAULT,
-                IppValue::Keyword(self.info.print_color_mode_default.clone()),
-            ),
-            IppAttribute::new(
-                IppAttribute::PRINT_COLOR_MODE_SUPPORTED,
-                IppValue::Array(
-                    self.info
-                        .print_color_mode_supported
-                        .iter()
-                        .map(|mode| IppValue::Keyword(mode.clone()))
-                        .collect::<Vec<_>>(),
-                ),
-            ),
-        ];
-        if let Some(preferred) = self.info.document_format_preferred.clone() {
+                    .document_formats_supported
+                    .iter()
+                    .map(|format| IppValue::MimeMediaType(format.clone()))
+                    .collect::<Vec<_>>()
+            )
+        );
+        add_if_requested!(
+            IppAttribute::PRINTER_IS_ACCEPTING_JOBS,
+            IppValue::Boolean(true)
+        );
+        add_if_requested!(
+            IppAttribute::PDL_OVERRIDE_SUPPORTED,
+            IppValue::Keyword("attempted".to_string())
+        );
+        add_if_requested!(
+            IppAttribute::PRINTER_UP_TIME,
+            IppValue::Integer(self.uptime().as_secs() as i32)
+        );
+        add_if_requested!(
+            IppAttribute::COMPRESSION_SUPPORTED,
+            IppValue::Array(vec![
+                IppValue::Keyword("none".to_string()),
+                IppValue::Keyword("gzip".to_string()),
+            ])
+        );
+        add_if_requested!(
+            IppAttribute::MEDIA_DEFAULT,
+            IppValue::Keyword(self.info.media_default.clone())
+        );
+        add_if_requested!(
+            IppAttribute::MEDIA_SUPPORTED,
+            IppValue::Array(
+                self.info
+                    .media_supported
+                    .iter()
+                    .map(|media| IppValue::Keyword(media.clone()))
+                    .collect::<Vec<_>>()
+            )
+        );
+        add_if_requested!(
+            IppAttribute::ORIENTATION_REQUESTED_DEFAULT,
+            self.info
+                .orientation_default
+                .map(|orientation| orientation.into())
+                .unwrap_or(IppValue::NoValue)
+        );
+        add_if_requested!(
+            IppAttribute::ORIENTATION_REQUESTED_SUPPORTED,
+            IppValue::Array(
+                self.info
+                    .orientation_supported
+                    .iter()
+                    .map(|orientation| (*orientation).into())
+                    .collect::<Vec<_>>()
+            )
+        );
+        add_if_requested!(
+            IppAttribute::SIDES_DEFAULT,
+            IppValue::Keyword(self.info.side_default.clone())
+        );
+        add_if_requested!(
+            IppAttribute::SIDES_SUPPORTED,
+            IppValue::Array(
+                self.info
+                    .side_supported
+                    .iter()
+                    .map(|side| IppValue::Keyword(side.clone()))
+                    .collect::<Vec<_>>()
+            )
+        );
+        add_if_requested!(
+            IppAttribute::PRINT_COLOR_MODE_DEFAULT,
+            IppValue::Keyword(self.info.print_color_mode_default.clone())
+        );
+        add_if_requested!(
+            IppAttribute::PRINT_COLOR_MODE_SUPPORTED,
+            IppValue::Array(
+                self.info
+                    .print_color_mode_supported
+                    .iter()
+                    .map(|mode| IppValue::Keyword(mode.clone()))
+                    .collect::<Vec<_>>()
+            )
+        );
+        optional_add_if_requested!(
+            "document-format-preferred",
+            self.info
+                .document_format_preferred
+                .clone()
+                .map(|x| IppValue::MimeMediaType(x))
+        );
+        optional_add_if_requested!(
+            IppAttribute::PRINTER_RESOLUTION_SUPPORTED,
+            self.info
+                .printer_resolution_supported
+                .clone()
+                .map(|resolutions| {
+                    IppValue::Array(
+                        resolutions
+                            .iter()
+                            .map(|resolution| IppValue::from(*resolution))
+                            .collect::<Vec<_>>(),
+                    )
+                })
+        );
+        optional_add_if_requested!(
+            IppAttribute::PRINTER_RESOLUTION_DEFAULT,
+            self.info
+                .printer_resolution_default
+                .clone()
+                .map(|resolution| resolution.into())
+        );
+        if is_requested!("job-creation-attributes-supported") {
+            let mut job_creation_attributes_supported = vec![
+                IppValue::Keyword("job-name".to_string()),
+                IppValue::Keyword("media".to_string()),
+                IppValue::Keyword("orientation-requested".to_string()),
+                IppValue::Keyword("print-color-mode".to_string()),
+                IppValue::Keyword("sides".to_string()),
+            ];
+            if self.info.printer_resolution_supported.is_some() {
+                job_creation_attributes_supported
+                    .push(IppValue::Keyword("printer-resolution".to_string()));
+            }
             r.push(IppAttribute::new(
-                "document-format-preferred",
-                IppValue::MimeMediaType(preferred),
+                "job-creation-attributes-supported",
+                IppValue::Array(job_creation_attributes_supported),
             ));
         }
-        if let Some(ref supported) = self.info.printer_resolution_supported {
-            r.push(IppAttribute::new(
-                IppAttribute::PRINTER_RESOLUTION_SUPPORTED,
-                IppValue::Array(
-                    supported
-                        .iter()
-                        .map(|resolution| IppValue::from(*resolution))
-                        .collect::<Vec<_>>(),
-                ),
-            ));
-        }
-        if let Some(default) = self.info.printer_resolution_default {
-            r.push(IppAttribute::new(
-                IppAttribute::PRINTER_RESOLUTION_DEFAULT,
-                default.into(),
-            ));
-        }
-
-        let mut job_creation_attributes_supported = vec![
-            IppValue::Keyword("job-name".to_string()),
-            IppValue::Keyword("media".to_string()),
-            IppValue::Keyword("orientation-requested".to_string()),
-            IppValue::Keyword("print-color-mode".to_string()),
-            IppValue::Keyword("sides".to_string()),
-        ];
-        if self.info.printer_resolution_supported.is_some() {
-            job_creation_attributes_supported
-                .push(IppValue::Keyword("printer-resolution".to_string()));
-        }
-        r.push(IppAttribute::new(
-            "job-creation-attributes-supported",
-            IppValue::Array(job_creation_attributes_supported),
-        ));
-
-        if let Some(info) = self.info.info.clone() {
-            r.push(IppAttribute::new(
-                IppAttribute::PRINTER_INFO,
-                IppValue::TextWithoutLanguage(info),
-            ));
-        }
-        if let Some(make_and_model) = self.info.make_and_model.clone() {
-            r.push(IppAttribute::new(
-                IppAttribute::PRINTER_MAKE_AND_MODEL,
-                IppValue::TextWithoutLanguage(make_and_model),
-            ));
-        }
-        if let Some(uuid) = self.info.uuid {
-            r.push(IppAttribute::new(
-                "printer-uuid",
-                IppValue::Uri(
-                    uuid.urn()
-                        .encode_lower(&mut Uuid::encode_buffer())
-                        .to_string(),
-                ),
+        optional_add_if_requested!(
+            IppAttribute::PRINTER_INFO,
+            self.info
+                .info
+                .clone()
+                .map(|x| IppValue::TextWithoutLanguage(x))
+        );
+        optional_add_if_requested!(
+            IppAttribute::PRINTER_MAKE_AND_MODEL,
+            self.info
+                .make_and_model
+                .clone()
+                .map(|x| IppValue::TextWithoutLanguage(x))
+        );
+        optional_add_if_requested!(
+            "printer-uuid",
+            self.info.uuid.map(|uuid| IppValue::Uri(
+                uuid.urn()
+                    .encode_lower(&mut Uuid::encode_buffer())
+                    .to_string()
             ))
-        }
+        );
+
         r
     }
     fn uptime(&self) -> Duration {
@@ -544,26 +573,17 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             req.header().request_id,
         );
         self.add_basic_attributes(&mut resp);
-        let optional_requested_attributes = get_ipp_attribute(
+        let requested_attributes = get_ipp_attribute(
             req.attributes(),
             DelimiterTag::OperationAttributes,
             IppAttribute::REQUESTED_ATTRIBUTES,
         )
         .map(|attr| {
             attr.into_iter()
-                .filter_map(|e| e.as_keyword())
-                .map(|e| e.as_ref())
-                .collect::<Vec<_>>()
+                .filter_map(|e| e.as_keyword().map(|x| x.as_str()))
+                .collect::<HashSet<_>>()
         });
-        let printer_attributes = optional_requested_attributes.map_or(
-            self.printer_attributes(),
-            |requested_attributes| {
-                self.printer_attributes()
-                    .into_iter()
-                    .filter(|attr| requested_attributes.contains(&attr.name()))
-                    .collect::<Vec<_>>()
-            },
-        );
+        let printer_attributes = self.printer_attributes(requested_attributes.as_ref());
         for attr in printer_attributes {
             resp.attributes_mut()
                 .add(DelimiterTag::PrinterAttributes, attr);
