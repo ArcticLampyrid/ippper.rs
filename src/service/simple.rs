@@ -207,8 +207,9 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             IppValue::Array(
                 self.info
                     .document_formats_supported
-                    .iter()
-                    .map(|format| IppValue::MimeMediaType(format.clone()))
+                    .clone()
+                    .into_iter()
+                    .map(IppValue::MimeMediaType)
                     .collect::<Vec<_>>()
             )
         );
@@ -240,8 +241,9 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             IppValue::Array(
                 self.info
                     .media_supported
-                    .iter()
-                    .map(|media| IppValue::Keyword(media.clone()))
+                    .clone()
+                    .into_iter()
+                    .map(IppValue::Keyword)
                     .collect::<Vec<_>>()
             )
         );
@@ -257,8 +259,9 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             IppValue::Array(
                 self.info
                     .orientation_supported
-                    .iter()
-                    .map(|orientation| (*orientation).into())
+                    .clone()
+                    .into_iter()
+                    .map(IppValue::from)
                     .collect::<Vec<_>>()
             )
         );
@@ -271,8 +274,9 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             IppValue::Array(
                 self.info
                     .side_supported
-                    .iter()
-                    .map(|side| IppValue::Keyword(side.clone()))
+                    .clone()
+                    .into_iter()
+                    .map(IppValue::Keyword)
                     .collect::<Vec<_>>()
             )
         );
@@ -285,8 +289,9 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             IppValue::Array(
                 self.info
                     .print_color_mode_supported
-                    .iter()
-                    .map(|mode| IppValue::Keyword(mode.clone()))
+                    .clone()
+                    .into_iter()
+                    .map(IppValue::Keyword)
                     .collect::<Vec<_>>()
             )
         );
@@ -295,7 +300,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             self.info
                 .document_format_preferred
                 .clone()
-                .map(|x| IppValue::MimeMediaType(x))
+                .map(IppValue::MimeMediaType)
         );
         optional_add_if_requested!(
             IppAttribute::PRINTER_RESOLUTION_SUPPORTED,
@@ -305,18 +310,15 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 .map(|resolutions| {
                     IppValue::Array(
                         resolutions
-                            .iter()
-                            .map(|resolution| IppValue::from(*resolution))
+                            .into_iter()
+                            .map(IppValue::from)
                             .collect::<Vec<_>>(),
                     )
                 })
         );
         optional_add_if_requested!(
             IppAttribute::PRINTER_RESOLUTION_DEFAULT,
-            self.info
-                .printer_resolution_default
-                .clone()
-                .map(|resolution| resolution.into())
+            self.info.printer_resolution_default.map(IppValue::from)
         );
         if is_requested!("job-creation-attributes-supported") {
             let mut job_creation_attributes_supported = vec![
@@ -337,17 +339,14 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         }
         optional_add_if_requested!(
             IppAttribute::PRINTER_INFO,
-            self.info
-                .info
-                .clone()
-                .map(|x| IppValue::TextWithoutLanguage(x))
+            self.info.info.clone().map(IppValue::TextWithoutLanguage)
         );
         optional_add_if_requested!(
             IppAttribute::PRINTER_MAKE_AND_MODEL,
             self.info
                 .make_and_model
                 .clone()
-                .map(|x| IppValue::TextWithoutLanguage(x))
+                .map(IppValue::TextWithoutLanguage)
         );
         optional_add_if_requested!(
             "printer-uuid",
