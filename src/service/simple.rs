@@ -23,6 +23,7 @@ pub trait SimpleIppServiceHandler: Send + Sync {
     }
 }
 
+#[derive(fmt_derive::Debug)]
 pub struct SimpleIppDocument {
     pub format: Option<String>,
     pub media: Option<String>,
@@ -31,6 +32,7 @@ pub struct SimpleIppDocument {
     pub print_color_mode: Option<String>,
     pub printer_resolution: Option<Resolution>,
 
+    #[fmt(ignore)]
     pub payload: IppPayload,
 }
 

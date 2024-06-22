@@ -23,6 +23,7 @@ impl SimpleIppServiceHandler for MyHandler {
         document: SimpleIppDocument,
     ) -> impl futures::Future<Output = anyhow::Result<()>> + Send {
         async move {
+            println!("Received document: {:#?}", document);
             let mut file = File::create("D:\\1.pdf").await?;
             io::copy(&mut document.payload.compat(), &mut file).await?;
             Ok(())

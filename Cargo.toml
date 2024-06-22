@@ -23,6 +23,7 @@ async-compression = { version = "0.4", features = [
     "gzip",
 ], default-features = false }
 derive_builder = "0.20"
+fmt-derive = "0.1"
 futures = "0.3"
 hyper = { version = "1.2", features = [
     "http1",
