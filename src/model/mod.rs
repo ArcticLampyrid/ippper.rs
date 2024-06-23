@@ -52,6 +52,23 @@ pub struct Resolution {
     pub units: i8,
 }
 
+impl Resolution {
+    pub fn new_dpi(cross_feed: i32, feed: i32) -> Self {
+        Self {
+            cross_feed,
+            feed,
+            units: 3,
+        }
+    }
+    pub fn new_dpcm(cross_feed: i32, feed: i32) -> Self {
+        Self {
+            cross_feed,
+            feed,
+            units: 4,
+        }
+    }
+}
+
 impl TryFrom<IppValue> for Resolution {
     type Error = IppValue;
 
