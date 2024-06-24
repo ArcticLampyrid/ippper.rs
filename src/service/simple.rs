@@ -5,7 +5,7 @@ use crate::service::IppService;
 use crate::utils::{get_ipp_attribute, remove_ipp_attribute};
 use anyhow;
 use async_compression::futures::bufread;
-use ipp::attribute::IppAttribute;
+use ipp::attribute::{IppAttribute, IppAttributes};
 use ipp::model::{DelimiterTag, IppVersion, JobState, Operation, PrinterState, StatusCode};
 use ipp::payload::IppPayload;
 use ipp::request::IppRequestResponse;
@@ -27,14 +27,59 @@ pub trait SimpleIppServiceHandler: Send + Sync {
 #[derive(fmt_derive::Debug)]
 pub struct SimpleIppDocument {
     pub format: Option<String>,
+    pub job_attributes: SimpleIppJobAttributes,
+
+    #[fmt(ignore)]
+    pub payload: IppPayload,
+}
+
+#[derive(fmt_derive::Debug, Clone)]
+pub struct SimpleIppJobAttributes {
     pub media: String,
     pub orientation: Option<PageOrientation>,
     pub sides: String,
     pub print_color_mode: String,
     pub printer_resolution: Option<Resolution>,
+}
 
-    #[fmt(ignore)]
-    pub payload: IppPayload,
+impl SimpleIppJobAttributes {
+    pub(crate) fn take_ipp_attributes(info: &PrinterInfo, attributes: &mut IppAttributes) -> Self {
+        let media = remove_ipp_attribute(attributes, DelimiterTag::JobAttributes, "media")
+            .and_then(|attr| attr.into_keyword().ok())
+            .unwrap_or_else(|| info.media_default.clone());
+
+        let orientation = remove_ipp_attribute(
+            attributes,
+            DelimiterTag::JobAttributes,
+            "orientation-requested",
+        )
+        .and_then(|attr| PageOrientation::try_from(attr).ok())
+        .or(info.orientation_default);
+
+        let sides = remove_ipp_attribute(attributes, DelimiterTag::JobAttributes, "sides")
+            .and_then(|attr| attr.into_keyword().ok())
+            .unwrap_or_else(|| info.sides_default.clone());
+
+        let print_color_mode =
+            remove_ipp_attribute(attributes, DelimiterTag::JobAttributes, "print-color-mode")
+                .and_then(|attr| attr.into_keyword().ok())
+                .unwrap_or_else(|| info.print_color_mode_default.clone());
+
+        let printer_resolution = remove_ipp_attribute(
+            attributes,
+            DelimiterTag::JobAttributes,
+            "printer-resolution",
+        )
+        .and_then(|attr| Resolution::try_from(attr).ok())
+        .or(info.printer_resolution_default);
+        Self {
+            media,
+            orientation,
+            sides,
+            print_color_mode,
+            printer_resolution,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Builder)]
@@ -453,37 +498,8 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             }
         }
 
-        let media = remove_ipp_attribute(&mut attributes, DelimiterTag::JobAttributes, "media")
-            .and_then(|attr| attr.into_keyword().ok())
-            .unwrap_or_else(|| self.info.media_default.clone());
-
-        let orientation = remove_ipp_attribute(
-            &mut attributes,
-            DelimiterTag::JobAttributes,
-            "orientation-requested",
-        )
-        .and_then(|attr| PageOrientation::try_from(attr).ok())
-        .or(self.info.orientation_default);
-
-        let sides = remove_ipp_attribute(&mut attributes, DelimiterTag::JobAttributes, "sides")
-            .and_then(|attr| attr.into_keyword().ok())
-            .unwrap_or_else(|| self.info.sides_default.clone());
-
-        let print_color_mode = remove_ipp_attribute(
-            &mut attributes,
-            DelimiterTag::JobAttributes,
-            "print-color-mode",
-        )
-        .and_then(|attr| attr.into_keyword().ok())
-        .unwrap_or_else(|| self.info.print_color_mode_default.clone());
-
-        let printer_resolution = remove_ipp_attribute(
-            &mut attributes,
-            DelimiterTag::JobAttributes,
-            "printer-resolution",
-        )
-        .and_then(|attr| Resolution::try_from(attr).ok())
-        .or(self.info.printer_resolution_default);
+        let job_attributes =
+            SimpleIppJobAttributes::take_ipp_attributes(&self.info, &mut attributes);
 
         let compression = remove_ipp_attribute(
             &mut attributes,
@@ -519,11 +535,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         self.handler
             .handle_document(SimpleIppDocument {
                 format,
-                media,
-                orientation,
-                sides,
-                print_color_mode,
-                printer_resolution,
+                job_attributes,
                 payload,
             })
             .await?;
