@@ -27,10 +27,10 @@ pub trait SimpleIppServiceHandler: Send + Sync {
 #[derive(fmt_derive::Debug)]
 pub struct SimpleIppDocument {
     pub format: Option<String>,
-    pub media: Option<String>,
+    pub media: String,
     pub orientation: Option<PageOrientation>,
-    pub sides: Option<String>,
-    pub print_color_mode: Option<String>,
+    pub sides: String,
+    pub print_color_mode: String,
     pub printer_resolution: Option<Resolution>,
 
     #[fmt(ignore)]
@@ -62,18 +62,18 @@ pub struct PrinterInfo {
     #[builder(default = r#"None"#)]
     orientation_default: Option<PageOrientation>,
     #[builder(default = r#"vec!["one-sided".to_string()]"#)]
-    side_supported: Vec<String>,
+    sides_supported: Vec<String>,
     #[builder(default = r#""one-sided".to_string()"#)]
-    side_default: String,
+    sides_default: String,
     #[builder(default = r#"vec!["monochrome".to_string(), "color".to_string()]"#)]
     print_color_mode_supported: Vec<String>,
     #[builder(default = r#""monochrome".to_string()"#)]
     print_color_mode_default: String,
-    #[builder(default = r#"None"#)]
-    printer_resolution_supported: Option<Vec<Resolution>>,
+    #[builder(default = r#"vec![]"#)]
+    printer_resolution_supported: Vec<Resolution>,
     #[builder(default = r#"None"#)]
     printer_resolution_default: Option<Resolution>,
-    #[builder(default = r#"Some(vec![
+    #[builder(default = r#"vec![
         "adobe-1.2".to_string(),
         "adobe-1.3".to_string(),
         "adobe-1.4".to_string(),
@@ -83,8 +83,8 @@ pub struct PrinterInfo {
         "iso-19005-1_2005".to_string(),
         "iso-32000-1_2008".to_string(),
         "pwg-5102.3".to_string(),
-    ])"#)]
-    pdf_versions_supported: Option<Vec<String>>,
+    ]"#)]
+    pdf_versions_supported: Vec<String>,
 }
 
 pub struct SimpleIppService<T: SimpleIppServiceHandler> {
@@ -279,13 +279,13 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         );
         add_if_requested!(
             IppAttribute::SIDES_DEFAULT,
-            IppValue::Keyword(self.info.side_default.clone())
+            IppValue::Keyword(self.info.sides_default.clone())
         );
         add_if_requested!(
             IppAttribute::SIDES_SUPPORTED,
             IppValue::Array(
                 self.info
-                    .side_supported
+                    .sides_supported
                     .clone()
                     .into_iter()
                     .map(IppValue::Keyword)
@@ -314,35 +314,36 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 .clone()
                 .map(IppValue::MimeMediaType)
         );
-        optional_add_if_requested!(
-            IppAttribute::PRINTER_RESOLUTION_SUPPORTED,
-            self.info
-                .printer_resolution_supported
-                .clone()
-                .map(|resolutions| {
-                    IppValue::Array(
-                        resolutions
-                            .into_iter()
-                            .map(IppValue::from)
-                            .collect::<Vec<_>>(),
-                    )
-                })
-        );
+        if !self.info.printer_resolution_supported.is_empty() {
+            add_if_requested!(
+                IppAttribute::PRINTER_RESOLUTION_SUPPORTED,
+                IppValue::Array(
+                    self.info
+                        .printer_resolution_supported
+                        .clone()
+                        .into_iter()
+                        .map(IppValue::from)
+                        .collect::<Vec<_>>()
+                )
+            );
+        }
         optional_add_if_requested!(
             IppAttribute::PRINTER_RESOLUTION_DEFAULT,
             self.info.printer_resolution_default.map(IppValue::from)
         );
-        optional_add_if_requested!(
-            "pdf-versions-supported",
-            self.info.pdf_versions_supported.clone().map(|versions| {
+        if !self.info.pdf_versions_supported.is_empty() {
+            add_if_requested!(
+                "pdf-versions-supported",
                 IppValue::Array(
-                    versions
+                    self.info
+                        .pdf_versions_supported
+                        .clone()
                         .into_iter()
                         .map(IppValue::Keyword)
-                        .collect::<Vec<_>>(),
+                        .collect::<Vec<_>>()
                 )
-            })
-        );
+            );
+        }
         if is_requested!("job-creation-attributes-supported") {
             let mut job_creation_attributes_supported = vec![
                 IppValue::Keyword("job-name".to_string()),
@@ -351,7 +352,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 IppValue::Keyword("print-color-mode".to_string()),
                 IppValue::Keyword("sides".to_string()),
             ];
-            if self.info.printer_resolution_supported.is_some() {
+            if !self.info.printer_resolution_supported.is_empty() {
                 job_creation_attributes_supported
                     .push(IppValue::Keyword("printer-resolution".to_string()));
             }
@@ -453,31 +454,36 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         }
 
         let media = remove_ipp_attribute(&mut attributes, DelimiterTag::JobAttributes, "media")
-            .and_then(|attr| attr.into_keyword().ok());
+            .and_then(|attr| attr.into_keyword().ok())
+            .unwrap_or_else(|| self.info.media_default.clone());
 
         let orientation = remove_ipp_attribute(
             &mut attributes,
             DelimiterTag::JobAttributes,
             "orientation-requested",
         )
-        .and_then(|attr| PageOrientation::try_from(attr).ok());
+        .and_then(|attr| PageOrientation::try_from(attr).ok())
+        .or(self.info.orientation_default);
 
         let sides = remove_ipp_attribute(&mut attributes, DelimiterTag::JobAttributes, "sides")
-            .and_then(|attr| attr.into_keyword().ok());
+            .and_then(|attr| attr.into_keyword().ok())
+            .unwrap_or_else(|| self.info.sides_default.clone());
 
         let print_color_mode = remove_ipp_attribute(
             &mut attributes,
             DelimiterTag::JobAttributes,
             "print-color-mode",
         )
-        .and_then(|attr| attr.into_keyword().ok());
+        .and_then(|attr| attr.into_keyword().ok())
+        .unwrap_or_else(|| self.info.print_color_mode_default.clone());
 
         let printer_resolution = remove_ipp_attribute(
             &mut attributes,
             DelimiterTag::JobAttributes,
             "printer-resolution",
         )
-        .and_then(|attr| Resolution::try_from(attr).ok());
+        .and_then(|attr| Resolution::try_from(attr).ok())
+        .or(self.info.printer_resolution_default);
 
         let compression = remove_ipp_attribute(
             &mut attributes,

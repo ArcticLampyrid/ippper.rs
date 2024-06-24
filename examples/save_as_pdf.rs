@@ -40,12 +40,12 @@ async fn main() -> anyhow::Result<()> {
             // Make it unique for each instance
             Uuid::parse_str("786a551c-65a3-43ce-89ba-33c51bae9bc2").unwrap(),
         ))
-        .side_supported(vec![
+        .sides_supported(vec![
             "one-sided".to_string(),
             "two-sided-long-edge".to_string(),
             "two-sided-short-edge".to_string(),
         ])
-        .printer_resolution_supported(Some(vec![
+        .printer_resolution_supported(vec![
             Resolution {
                 cross_feed: 300,
                 feed: 300,
@@ -56,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
                 feed: 600,
                 units: 3,
             },
-        ]))
+        ])
         .printer_resolution_default(Some(Resolution {
             cross_feed: 600,
             feed: 600,
