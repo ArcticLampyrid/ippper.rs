@@ -93,7 +93,7 @@ pub struct PrinterInfo {
     #[builder(default = r#"None"#)]
     uuid: Option<Uuid>,
     #[builder(default = r#"vec!["application/pdf".to_string()]"#)]
-    document_formats_supported: Vec<String>,
+    document_format_supported: Vec<String>,
     #[builder(default = r#""application/pdf".to_string()"#)]
     document_format_default: String,
     #[builder(default = r#"Some("application/pdf".to_string())"#)]
@@ -263,7 +263,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             IppAttribute::DOCUMENT_FORMAT_SUPPORTED,
             IppValue::Array(
                 self.info
-                    .document_formats_supported
+                    .document_format_supported
                     .clone()
                     .into_iter()
                     .map(IppValue::MimeMediaType)
@@ -489,7 +489,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
 
         // Check if the requested document format is supported
         if let Some(ref x) = format {
-            if !self.info.document_formats_supported.contains(x) {
+            if !self.info.document_format_supported.contains(x) {
                 return Err(IppError {
                     code: StatusCode::ClientErrorDocumentFormatNotSupported,
                     msg: StatusCode::ClientErrorDocumentFormatNotSupported.to_string(),
