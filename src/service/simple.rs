@@ -622,7 +622,8 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             attr.into_iter()
                 .filter_map(|e| e.as_keyword().map(|x| x.as_str()))
                 .collect::<HashSet<_>>()
-        });
+        })
+        .filter(|x| !x.contains("all"));
         let printer_attributes = self.printer_attributes(requested_attributes.as_ref());
         for attr in printer_attributes {
             resp.attributes_mut()
