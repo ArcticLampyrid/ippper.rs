@@ -10,7 +10,7 @@ pub fn get_ipp_attribute<'a>(
         .map(|a| a.value())
 }
 
-pub fn remove_ipp_attribute(
+pub fn take_ipp_attribute(
     r: &mut IppAttributes,
     tag: DelimiterTag,
     name: &str,

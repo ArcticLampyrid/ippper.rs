@@ -2,7 +2,7 @@ use crate::error::IppError;
 use crate::model::{PageOrientation, Resolution};
 use crate::result::IppResult;
 use crate::service::IppService;
-use crate::utils::{get_ipp_attribute, remove_ipp_attribute};
+use crate::utils::{get_ipp_attribute, take_ipp_attribute};
 use anyhow;
 use async_compression::futures::bufread;
 use ipp::attribute::{IppAttribute, IppAttributes};
@@ -44,11 +44,11 @@ pub struct SimpleIppJobAttributes {
 
 impl SimpleIppJobAttributes {
     pub(crate) fn take_ipp_attributes(info: &PrinterInfo, attributes: &mut IppAttributes) -> Self {
-        let media = remove_ipp_attribute(attributes, DelimiterTag::JobAttributes, "media")
+        let media = take_ipp_attribute(attributes, DelimiterTag::JobAttributes, "media")
             .and_then(|attr| attr.into_keyword().ok())
             .unwrap_or_else(|| info.media_default.clone());
 
-        let orientation = remove_ipp_attribute(
+        let orientation = take_ipp_attribute(
             attributes,
             DelimiterTag::JobAttributes,
             "orientation-requested",
@@ -56,16 +56,16 @@ impl SimpleIppJobAttributes {
         .and_then(|attr| PageOrientation::try_from(attr).ok())
         .or(info.orientation_default);
 
-        let sides = remove_ipp_attribute(attributes, DelimiterTag::JobAttributes, "sides")
+        let sides = take_ipp_attribute(attributes, DelimiterTag::JobAttributes, "sides")
             .and_then(|attr| attr.into_keyword().ok())
             .unwrap_or_else(|| info.sides_default.clone());
 
         let print_color_mode =
-            remove_ipp_attribute(attributes, DelimiterTag::JobAttributes, "print-color-mode")
+            take_ipp_attribute(attributes, DelimiterTag::JobAttributes, "print-color-mode")
                 .and_then(|attr| attr.into_keyword().ok())
                 .unwrap_or_else(|| info.print_color_mode_default.clone());
 
-        let printer_resolution = remove_ipp_attribute(
+        let printer_resolution = take_ipp_attribute(
             attributes,
             DelimiterTag::JobAttributes,
             "printer-resolution",
@@ -480,7 +480,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let req_id = req.header().request_id;
         let version = req.header().version;
 
-        let format = remove_ipp_attribute(
+        let format = take_ipp_attribute(
             &mut attributes,
             DelimiterTag::OperationAttributes,
             "document-format",
@@ -501,7 +501,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let job_attributes =
             SimpleIppJobAttributes::take_ipp_attributes(&self.info, &mut attributes);
 
-        let compression = remove_ipp_attribute(
+        let compression = take_ipp_attribute(
             &mut attributes,
             DelimiterTag::OperationAttributes,
             "compression",
