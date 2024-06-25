@@ -1,5 +1,5 @@
 use ippper::model::{PageOrientation, Resolution};
-use ippper::server::serve_ipp;
+use ippper::server::{serve_adaptive_https, tls_config_from_reader, wrap_as_http_service};
 use ippper::service::simple::{
     PrinterInfoBuilder, SimpleIppDocument, SimpleIppService, SimpleIppServiceHandler,
 };
@@ -65,6 +65,10 @@ async fn main() -> anyhow::Result<()> {
         .orientation_supported(vec![PageOrientation::Portrait, PageOrientation::Landscape])
         .build()
         .unwrap();
-    let ipp_service = SimpleIppService::new(info, MyHandler::new());
-    serve_ipp(addr, Arc::new(ipp_service)).await
+    let ipp_service = Arc::new(SimpleIppService::new(info, MyHandler::new()));
+    const CERTIFICATE: &[u8] = include_bytes!("certificate/certificate.pem");
+    const KEY: &[u8] = include_bytes!("certificate/key.pem");
+    let tls_config =
+        Arc::new(tls_config_from_reader(CERTIFICATE, KEY).expect("Failed to load tls config"));
+    serve_adaptive_https(addr, wrap_as_http_service(ipp_service), tls_config).await
 }
