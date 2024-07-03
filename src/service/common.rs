@@ -1,6 +1,7 @@
 use crate::error::IppError;
 use crate::result::IppResult;
 use anyhow;
+use http::request::Parts as ReqParts;
 use ipp::attribute::IppAttribute;
 use ipp::model::{DelimiterTag, IppVersion, Operation, StatusCode};
 use ipp::request::IppRequestResponse;
@@ -17,6 +18,7 @@ fn operation_not_supported() -> anyhow::Error {
 pub trait IppService: Send + Sync {
     fn print_job(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -24,6 +26,7 @@ pub trait IppService: Send + Sync {
 
     fn print_uri(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -31,6 +34,7 @@ pub trait IppService: Send + Sync {
 
     fn validate_job(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -38,6 +42,7 @@ pub trait IppService: Send + Sync {
 
     fn create_job(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -45,6 +50,7 @@ pub trait IppService: Send + Sync {
 
     fn send_document(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -52,6 +58,7 @@ pub trait IppService: Send + Sync {
 
     fn send_uri(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -59,6 +66,7 @@ pub trait IppService: Send + Sync {
 
     fn cancel_job(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -66,6 +74,7 @@ pub trait IppService: Send + Sync {
 
     fn get_job_attributes(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -73,6 +82,7 @@ pub trait IppService: Send + Sync {
 
     fn get_jobs(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -80,6 +90,7 @@ pub trait IppService: Send + Sync {
 
     fn get_printer_attributes(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -87,6 +98,7 @@ pub trait IppService: Send + Sync {
 
     fn hold_job(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -94,6 +106,7 @@ pub trait IppService: Send + Sync {
 
     fn release_job(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -101,6 +114,7 @@ pub trait IppService: Send + Sync {
 
     fn restart_job(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -108,6 +122,7 @@ pub trait IppService: Send + Sync {
 
     fn pause_printer(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -115,6 +130,7 @@ pub trait IppService: Send + Sync {
 
     fn resume_printer(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -122,6 +138,7 @@ pub trait IppService: Send + Sync {
 
     fn purge_jobs(
         &self,
+        _head: ReqParts,
         _req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppResult> + Send {
         futures::future::ready(Err(operation_not_supported()))
@@ -162,6 +179,7 @@ pub trait IppService: Send + Sync {
 
     fn handle_request(
         &self,
+        head: ReqParts,
         req: IppRequestResponse,
     ) -> impl futures::Future<Output = IppRequestResponse> + Send {
         async {
@@ -180,22 +198,22 @@ pub trait IppService: Send + Sync {
             let version = req.header().version;
             match Operation::from_u16(req.header().operation_or_status) {
                 Some(op) => match op {
-                    Operation::PrintJob => self.print_job(req).await,
-                    Operation::PrintUri => self.print_uri(req).await,
-                    Operation::ValidateJob => self.validate_job(req).await,
-                    Operation::CreateJob => self.create_job(req).await,
-                    Operation::SendDocument => self.send_document(req).await,
-                    Operation::SendUri => self.send_uri(req).await,
-                    Operation::CancelJob => self.cancel_job(req).await,
-                    Operation::GetJobAttributes => self.get_job_attributes(req).await,
-                    Operation::GetJobs => self.get_jobs(req).await,
-                    Operation::GetPrinterAttributes => self.get_printer_attributes(req).await,
-                    Operation::HoldJob => self.hold_job(req).await,
-                    Operation::ReleaseJob => self.release_job(req).await,
-                    Operation::RestartJob => self.restart_job(req).await,
-                    Operation::PausePrinter => self.pause_printer(req).await,
-                    Operation::ResumePrinter => self.resume_printer(req).await,
-                    Operation::PurgeJobs => self.purge_jobs(req).await,
+                    Operation::PrintJob => self.print_job(head, req).await,
+                    Operation::PrintUri => self.print_uri(head, req).await,
+                    Operation::ValidateJob => self.validate_job(head, req).await,
+                    Operation::CreateJob => self.create_job(head, req).await,
+                    Operation::SendDocument => self.send_document(head, req).await,
+                    Operation::SendUri => self.send_uri(head, req).await,
+                    Operation::CancelJob => self.cancel_job(head, req).await,
+                    Operation::GetJobAttributes => self.get_job_attributes(head, req).await,
+                    Operation::GetJobs => self.get_jobs(head, req).await,
+                    Operation::GetPrinterAttributes => self.get_printer_attributes(head, req).await,
+                    Operation::HoldJob => self.hold_job(head, req).await,
+                    Operation::ReleaseJob => self.release_job(head, req).await,
+                    Operation::RestartJob => self.restart_job(head, req).await,
+                    Operation::PausePrinter => self.pause_printer(head, req).await,
+                    Operation::ResumePrinter => self.resume_printer(head, req).await,
+                    Operation::PurgeJobs => self.purge_jobs(head, req).await,
                     _ => Err(operation_not_supported()),
                 },
                 None => Err(operation_not_supported()),

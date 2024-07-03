@@ -29,9 +29,10 @@ where
                 .unwrap()),
         };
     }
-    let reader = BodyReader::new(req.into_body());
+    let (head, body) = req.into_parts();
+    let reader = BodyReader::new(body);
     let ipp_request = AsyncIppParser::new(reader).parse().await?;
-    let response = handler.handle_request(ipp_request).await;
+    let response = handler.handle_request(head, ipp_request).await;
     let body = Body::from(response);
     Ok(Response::builder()
         .status(200)

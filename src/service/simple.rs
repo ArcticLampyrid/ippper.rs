@@ -5,6 +5,8 @@ use crate::service::IppService;
 use crate::utils::{get_ipp_attribute, take_ipp_attribute};
 use anyhow;
 use async_compression::futures::bufread;
+use http::request::Parts as ReqParts;
+use http::uri::Scheme;
 use ipp::attribute::{IppAttribute, IppAttributes};
 use ipp::model::{DelimiterTag, IppVersion, JobState, Operation, PrinterState, StatusCode};
 use ipp::payload::IppPayload;
@@ -136,6 +138,7 @@ pub struct SimpleIppService<T: SimpleIppServiceHandler> {
     start_time: Instant,
     job_id: AtomicI32,
     host: String,
+    basepath: String,
     info: PrinterInfo,
     handler: T,
 }
@@ -145,6 +148,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             start_time: Instant::now(),
             job_id: AtomicI32::new(1000),
             host: "defaulthost:631".to_string(),
+            basepath: "/".to_string(),
             info,
             handler,
         }
@@ -152,8 +156,21 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
     pub fn set_host(&mut self, host: &str) {
         self.host = host.to_string();
     }
+    pub fn set_basepath(&mut self, basepath: &str) {
+        self.basepath = basepath.to_string();
+    }
     pub fn set_info(&mut self, info: PrinterInfo) {
         self.info = info;
+    }
+    fn make_url(&self, scheme: Option<&Scheme>, path: &str) -> String {
+        let basepath = self.basepath.trim_start_matches('/').trim_end_matches('/');
+        let slash_before_basepath = if basepath.is_empty() { "" } else { "/" };
+        let slash_before_path = if path.starts_with('/') { "" } else { "/" };
+        let scheme = scheme.map_or("ipp", |x| x.as_str());
+        format!(
+            "{}://{}{}{}{}{}",
+            scheme, self.host, slash_before_basepath, basepath, slash_before_path, path
+        )
     }
     fn add_basic_attributes(&self, resp: &mut IppRequestResponse) {
         resp.attributes_mut().add(
@@ -171,7 +188,11 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             ),
         );
     }
-    fn printer_attributes(&self, requested: Option<&HashSet<&str>>) -> Vec<IppAttribute> {
+    fn printer_attributes(
+        &self,
+        head: &ReqParts,
+        requested: Option<&HashSet<&str>>,
+    ) -> Vec<IppAttribute> {
         let mut r = Vec::<IppAttribute>::new();
 
         macro_rules! is_requested {
@@ -198,7 +219,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
 
         add_if_requested!(
             IppAttribute::PRINTER_URI_SUPPORTED,
-            IppValue::Uri(format!("ipp://{}/printer", self.host))
+            IppValue::Uri(self.make_url(head.uri.scheme(), "/"))
         );
         add_if_requested!(
             IppAttribute::URI_AUTHENTICATION_SUPPORTED,
@@ -206,7 +227,14 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         );
         add_if_requested!(
             IppAttribute::URI_SECURITY_SUPPORTED,
-            IppValue::Keyword("none".to_string())
+            IppValue::Keyword(
+                match head.uri.scheme_str() {
+                    Some("ipps") => "tls",
+                    Some("https") => "tls",
+                    _ => "none",
+                }
+                .to_string()
+            )
         );
         add_if_requested!(
             IppAttribute::PRINTER_NAME,
@@ -433,6 +461,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
     }
     fn job_attributes(
         &self,
+        head: &ReqParts,
         job_id: i32,
         job_state: JobState,
         job_state_reasons: IppValue,
@@ -440,14 +469,14 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         vec![
             IppAttribute::new(
                 IppAttribute::JOB_URI,
-                IppValue::Uri(format!("ipp://{}/job/{}", self.host, job_id)),
+                IppValue::Uri(self.make_url(head.uri.scheme(), format!("job/{}", job_id).as_str())),
             ),
             IppAttribute::new(IppAttribute::JOB_ID, IppValue::Integer(job_id)),
             IppAttribute::new(IppAttribute::JOB_STATE, IppValue::Enum(job_state as i32)),
             IppAttribute::new(IppAttribute::JOB_STATE_REASONS, job_state_reasons),
             IppAttribute::new(
                 "job-printer-uri",
-                IppValue::Uri(format!("ipp://{}/printer", self.host)),
+                IppValue::Uri(self.make_url(head.uri.scheme(), "/")),
             ),
             IppAttribute::new(
                 IppAttribute::JOB_NAME,
@@ -472,7 +501,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
     fn version(&self) -> IppVersion {
         IppVersion::v2_0()
     }
-    async fn print_job(&self, mut req: IppRequestResponse) -> IppResult {
+    async fn print_job(&self, head: ReqParts, mut req: IppRequestResponse) -> IppResult {
         // Take the attributes from the request, leaving an empty set of attributes
         // in the request. This will avoid the need to clone the attributes.
         let mut attributes = std::mem::take(req.attributes_mut());
@@ -547,6 +576,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         );
         let job_id = self.job_id.fetch_add(1, Ordering::Relaxed);
         let job_attributes = self.job_attributes(
+            &head,
             job_id,
             JobState::Completed,
             IppValue::Keyword("none".to_string()),
@@ -557,7 +587,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         Ok(resp)
     }
 
-    async fn validate_job(&self, req: IppRequestResponse) -> IppResult {
+    async fn validate_job(&self, _head: ReqParts, req: IppRequestResponse) -> IppResult {
         let mut resp = IppRequestResponse::new_response(
             req.header().version,
             StatusCode::SuccessfulOk,
@@ -567,7 +597,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         Ok(resp)
     }
 
-    async fn cancel_job(&self, req: IppRequestResponse) -> IppResult {
+    async fn cancel_job(&self, _head: ReqParts, req: IppRequestResponse) -> IppResult {
         let mut resp = IppRequestResponse::new_response(
             req.header().version,
             StatusCode::SuccessfulOk,
@@ -577,7 +607,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         Ok(resp)
     }
 
-    async fn get_job_attributes(&self, req: IppRequestResponse) -> IppResult {
+    async fn get_job_attributes(&self, head: ReqParts, req: IppRequestResponse) -> IppResult {
         let mut resp = IppRequestResponse::new_response(
             req.header().version,
             StatusCode::SuccessfulOk,
@@ -593,6 +623,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             Some(job_id) => {
                 self.add_basic_attributes(&mut resp);
                 let job_attributes = self.job_attributes(
+                    &head,
                     *job_id,
                     JobState::Completed,
                     IppValue::Keyword("none".to_string()),
@@ -606,7 +637,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         }
     }
 
-    async fn get_printer_attributes(&self, req: IppRequestResponse) -> IppResult {
+    async fn get_printer_attributes(&self, head: ReqParts, req: IppRequestResponse) -> IppResult {
         let mut resp = IppRequestResponse::new_response(
             req.header().version,
             StatusCode::SuccessfulOk,
@@ -624,7 +655,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
                 .collect::<HashSet<_>>()
         })
         .filter(|x| !x.contains("all"));
-        let printer_attributes = self.printer_attributes(requested_attributes.as_ref());
+        let printer_attributes = self.printer_attributes(&head, requested_attributes.as_ref());
         for attr in printer_attributes {
             resp.attributes_mut()
                 .add(DelimiterTag::PrinterAttributes, attr);
