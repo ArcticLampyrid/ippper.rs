@@ -12,11 +12,17 @@ repository = "https://github.com/ArcticLampyrid/ippper.rs/"
 version = "0.3.0"
 
 [features]
-default = ["server", "server-tls"]
+default = ["server", "server-tls", "rustls-aws-lc-rs"]
 server = ["dep:hyper", "dep:hyper-util", "dep:tokio"]
 server-tls = ["server", "dep:tokio-rustls", "dep:rustls-pemfile"]
+rustls-aws-lc-rs = ["tokio-rustls?/aws-lc-rs"]
+rustls-ring = ["tokio-rustls?/ring"]
 
 [dependencies]
+tokio-rustls = { version = "0.26", optional = true, default-features = false, features = [
+    "logging",
+    "tls12",
+] }
 log = "0.4"
 anyhow = "1"
 async-compression = { version = "0.4", features = [
@@ -54,9 +60,8 @@ tokio-util = { version = "0.7", features = [
     "compat",
 ], default-features = false }
 uuid = "1"
-tokio-rustls = { version = "0.26", optional = true }
 rustls-pemfile = { version = "2.1", optional = true }
 
 [[example]]
 name = "save_as_pdf"
-required-features = ["server-tls", "tokio/fs"]
+required-features = ["server-tls", "tokio/fs", "rustls-aws-lc-rs"]
