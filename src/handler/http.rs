@@ -3,7 +3,7 @@ use crate::body_reader::BodyReader;
 use crate::service::IppService;
 use anyhow;
 use bytes::Buf;
-use http::{Method, Request, Response};
+use http::{Method, Request, Response, StatusCode};
 use http_body::Body as HttpBody;
 use ipp::parser::AsyncIppParser;
 use std::sync::Arc;
@@ -17,17 +17,18 @@ where
     ReqError: std::error::Error + Send + Sync + 'static,
     ReqBody: HttpBody<Data = ReqData, Error = ReqError> + Send + Sync + Unpin + 'static,
 {
-    if req.method() == Method::GET {
-        return match req.uri().path() {
-            "/" => Ok(Response::builder()
-                .status(200)
-                .body(Body::from("IPP server running..."))
-                .unwrap()),
-            _ => Ok(Response::builder()
-                .status(404)
-                .body(Body::from("404 Not Found"))
-                .unwrap()),
-        };
+    if req.method() != Method::POST {
+        return Ok(Response::builder()
+            .status(StatusCode::METHOD_NOT_ALLOWED)
+            .header("Allow", "POST")
+            .body(Body::from("405 Method Not Allowed"))
+            .unwrap());
+    }
+    if req.headers().get("Content-Type") != Some(&"application/ipp".parse().unwrap()) {
+        return Ok(Response::builder()
+            .status(StatusCode::UNSUPPORTED_MEDIA_TYPE)
+            .body(Body::from("415 Unsupported Media Type"))
+            .unwrap());
     }
     let (head, body) = req.into_parts();
     let reader = BodyReader::new(body);
