@@ -6,11 +6,10 @@ use bytes::Buf;
 use http::{Method, Request, Response, StatusCode};
 use http_body::Body as HttpBody;
 use ipp::parser::AsyncIppParser;
-use std::sync::Arc;
 
 pub async fn handle_ipp_via_http<ReqBody, ReqData, ReqError>(
     req: Request<ReqBody>,
-    handler: Arc<impl IppService>,
+    handler: &impl IppService,
 ) -> Result<Response<Body>, anyhow::Error>
 where
     ReqData: Buf + Send + Sync + Unpin + 'static,

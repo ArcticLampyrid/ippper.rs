@@ -28,7 +28,7 @@ where
 {
     service_fn(move |req| {
         let ipp_service = ipp_service.clone();
-        async move { handle_ipp_via_http(req, ipp_service).await }
+        async move { handle_ipp_via_http(req, ipp_service.as_ref()).await }
     })
 }
 
