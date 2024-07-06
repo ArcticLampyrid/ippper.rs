@@ -1,3 +1,4 @@
+use crate::utils::ReaderStream;
 use bytes::Bytes;
 use futures::stream::Stream;
 use http_body::Body as HttpBody;
@@ -7,8 +8,6 @@ use std::io;
 use std::pin::pin;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt};
-use tokio_util::io::ReaderStream;
 pub struct Body {
     pub(crate) inner: BodyInner,
 }
@@ -17,7 +16,7 @@ pub(crate) enum BodyInner {
     Bytes(Option<Bytes>),
     IppRequestResponse {
         header: Option<Bytes>,
-        payload: ReaderStream<Compat<IppPayload>>,
+        payload: ReaderStream<IppPayload>,
     },
     Empty,
 }
@@ -93,7 +92,7 @@ impl From<IppRequestResponse> for Body {
         Body {
             inner: BodyInner::IppRequestResponse {
                 header: Some(t.to_bytes()),
-                payload: ReaderStream::new(t.into_payload().compat()),
+                payload: ReaderStream::new(t.into_payload()),
             },
         }
     }

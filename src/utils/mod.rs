@@ -1,4 +1,6 @@
 use ipp::{attribute::IppAttributes, model::DelimiterTag, value::IppValue};
+mod reader_stream;
+pub(crate) use reader_stream::ReaderStream;
 
 pub fn get_ipp_attribute<'a>(
     r: &'a IppAttributes,

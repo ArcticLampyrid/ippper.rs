@@ -55,12 +55,14 @@ tokio = { version = "1", features = [
     "rt-multi-thread",
     "macros",
 ], default-features = false, optional = true }
-tokio-util = { version = "0.7", features = [
-    "io",
-    "compat",
-], default-features = false }
 uuid = "1"
 rustls-pemfile = { version = "2.1", optional = true }
+pin-project-lite = "0.2"
+
+[dev-dependencies]
+tokio-util = { version = "0.7", features = [
+    "compat",
+], default-features = false }
 
 [[example]]
 name = "save_as_pdf"
