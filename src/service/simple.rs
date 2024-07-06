@@ -280,6 +280,8 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             IppValue::Array(vec![
                 IppValue::Enum(Operation::PrintJob as i32),
                 IppValue::Enum(Operation::ValidateJob as i32),
+                IppValue::Enum(Operation::CreateJob as i32),
+                IppValue::Enum(Operation::SendDocument as i32),
                 IppValue::Enum(Operation::CancelJob as i32),
                 IppValue::Enum(Operation::GetJobAttributes as i32),
                 IppValue::Enum(Operation::GetPrinterAttributes as i32),
@@ -484,6 +486,51 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         self.job_snapshot.insert(id, data.clone()).await;
         data
     }
+    async fn find_job(&self, r: &IppAttributes) -> anyhow::Result<RwLock<JobInfo>> {
+        let job_id = get_ipp_attribute(r, DelimiterTag::OperationAttributes, IppAttribute::JOB_ID)
+            .and_then(|attr| attr.as_integer())
+            .cloned();
+        let job = match job_id {
+            Some(job_id) => self.job_snapshot.get(&job_id).await,
+            _ => None,
+        };
+        match job {
+            Some(job) => Ok(job),
+            _ => Err(IppError {
+                code: StatusCode::ClientErrorNotFound,
+                msg: StatusCode::ClientErrorNotFound.to_string(),
+            }
+            .into()),
+        }
+    }
+    fn take_document_format(&self, r: &mut IppAttributes) -> anyhow::Result<Option<String>> {
+        let format = take_ipp_attribute(r, DelimiterTag::OperationAttributes, "document-format")
+            .and_then(|attr| attr.into_mime_media_type().ok());
+
+        // Check if the requested document format is supported
+        if let Some(ref x) = format {
+            if !self.info.document_format_supported.contains(x) {
+                return Err(IppError {
+                    code: StatusCode::ClientErrorDocumentFormatNotSupported,
+                    msg: StatusCode::ClientErrorDocumentFormatNotSupported.to_string(),
+                }
+                .into());
+            }
+        }
+
+        Ok(format)
+    }
+    fn lite_job_attributes_for(&self, head: &ReqParts, job: &JobInfo) -> Vec<IppAttribute> {
+        vec![
+            IppAttribute::new(
+                IppAttribute::JOB_URI,
+                IppValue::Uri(self.make_url(head.uri.scheme(), format!("job/{}", job.id).as_str())),
+            ),
+            IppAttribute::new(IppAttribute::JOB_ID, IppValue::Integer(job.id)),
+            IppAttribute::new(IppAttribute::JOB_STATE, IppValue::Enum(job.state as i32)),
+            IppAttribute::new(IppAttribute::JOB_STATE_REASONS, job.state_reasons.clone()),
+        ]
+    }
     fn job_attributes_for(&self, head: &ReqParts, job: &JobInfo) -> Vec<IppAttribute> {
         let mut r = vec![
             IppAttribute::new(
@@ -546,6 +593,25 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
     }
 }
 
+fn decommpress_payload(
+    payload: IppPayload,
+    compression: Option<&str>,
+) -> anyhow::Result<IppPayload> {
+    match compression {
+        None => Ok(payload),
+        Some("none") => Ok(payload),
+        Some("gzip") => {
+            let decoder = bufread::GzipDecoder::new(futures::io::BufReader::new(payload));
+            Ok(IppPayload::new_async(decoder))
+        }
+        _ => Err(IppError {
+            code: StatusCode::ClientErrorCompressionNotSupported,
+            msg: StatusCode::ClientErrorCompressionNotSupported.to_string(),
+        }
+        .into()),
+    }
+}
+
 impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
     fn version(&self) -> IppVersion {
         IppVersion::v2_0()
@@ -557,24 +623,6 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
 
         let req_id = req.header().request_id;
         let version = req.header().version;
-
-        let format = take_ipp_attribute(
-            &mut attributes,
-            DelimiterTag::OperationAttributes,
-            "document-format",
-        )
-        .and_then(|attr| attr.into_mime_media_type().ok());
-
-        // Check if the requested document format is supported
-        if let Some(ref x) = format {
-            if !self.info.document_format_supported.contains(x) {
-                return Err(IppError {
-                    code: StatusCode::ClientErrorDocumentFormatNotSupported,
-                    msg: StatusCode::ClientErrorDocumentFormatNotSupported.to_string(),
-                }
-                .into());
-            }
-        }
 
         let job_attributes =
             SimpleIppJobAttributes::take_ipp_attributes(&self.info, &mut attributes);
@@ -592,37 +640,14 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             })
             .await;
 
+        let format = self.take_document_format(&mut attributes)?;
         let compression = take_ipp_attribute(
             &mut attributes,
             DelimiterTag::OperationAttributes,
             "compression",
         )
-        .and_then(|attr| match attr {
-            IppValue::Keyword(x) => {
-                if x == "none" {
-                    None
-                } else {
-                    Some(x)
-                }
-            }
-            _ => None,
-        });
-
-        let payload = match compression.as_deref() {
-            None => req.into_payload(),
-            Some("gzip") => {
-                let raw_payload = req.into_payload();
-                let decoder = bufread::GzipDecoder::new(futures::io::BufReader::new(raw_payload));
-                IppPayload::new_async(decoder)
-            }
-            _ => {
-                return Err(IppError {
-                    code: StatusCode::ClientErrorCompressionNotSupported,
-                    msg: StatusCode::ClientErrorCompressionNotSupported.to_string(),
-                }
-                .into())
-            }
-        };
+        .and_then(|attr| attr.into_keyword().ok());
+        let payload = decommpress_payload(req.into_payload(), compression.as_deref())?;
         self.handler
             .handle_document(SimpleIppDocument {
                 format,
@@ -638,11 +663,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
 
         let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
         self.add_basic_attributes(&mut resp);
-        resp.attributes_mut().add(
-            DelimiterTag::JobAttributes,
-            IppAttribute::new(IppAttribute::JOB_ID, IppValue::Integer(1)),
-        );
-        let job_attributes = self.job_attributes_for(&head, job.read().await.deref());
+        let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref());
         for attr in job_attributes {
             resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
         }
@@ -659,6 +680,88 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         Ok(resp)
     }
 
+    async fn create_job(&self, head: ReqParts, mut req: IppRequestResponse) -> IppResult {
+        // Take the attributes from the request, leaving an empty set of attributes
+        // in the request. This will avoid the need to clone the attributes.
+        let mut attributes = std::mem::take(req.attributes_mut());
+
+        let req_id = req.header().request_id;
+        let version = req.header().version;
+
+        let job_attributes =
+            SimpleIppJobAttributes::take_ipp_attributes(&self.info, &mut attributes);
+
+        let created_at = self.uptime();
+        let job = self
+            .alloc_job(|id| JobInfo {
+                id,
+                state: JobState::Processing,
+                state_reasons: IppValue::Keyword("none".to_string()),
+                attributes: job_attributes.clone(),
+                created_at,
+                processing_at: Some(created_at),
+                completed_at: None,
+            })
+            .await;
+
+        let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
+        self.add_basic_attributes(&mut resp);
+        let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref());
+        for attr in job_attributes {
+            resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
+        }
+        Ok(resp)
+    }
+
+    async fn send_document(&self, head: ReqParts, mut req: IppRequestResponse) -> IppResult {
+        let req_id = req.header().request_id;
+        let version = req.header().version;
+
+        let job = self.find_job(req.attributes()).await?;
+
+        // Update the job state to processing
+        let job_attributes;
+        {
+            let mut job = job.write().await;
+            job.state = JobState::Processing;
+            job.processing_at = Some(self.uptime());
+            job_attributes = job.attributes.clone();
+        }
+
+        // Take the attributes from the request, leaving an empty set of attributes
+        // in the request. This will avoid the need to clone the attributes.
+        let mut attributes = std::mem::take(req.attributes_mut());
+
+        let format = self.take_document_format(&mut attributes)?;
+        let compression = take_ipp_attribute(
+            &mut attributes,
+            DelimiterTag::OperationAttributes,
+            "compression",
+        )
+        .and_then(|attr| attr.into_keyword().ok());
+        let payload = decommpress_payload(req.into_payload(), compression.as_deref())?;
+        self.handler
+            .handle_document(SimpleIppDocument {
+                format,
+                job_attributes,
+                payload,
+            })
+            .await?;
+        {
+            let mut job = job.write().await;
+            job.state = JobState::Completed;
+            job.completed_at = Some(self.uptime());
+        }
+
+        let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
+        self.add_basic_attributes(&mut resp);
+        let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref());
+        for attr in job_attributes {
+            resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
+        }
+        Ok(resp)
+    }
+
     async fn cancel_job(&self, _head: ReqParts, req: IppRequestResponse) -> IppResult {
         let mut resp = IppRequestResponse::new_response(
             req.header().version,
@@ -669,37 +772,19 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         Ok(resp)
     }
 
-    async fn get_job_attributes(&self, head: ReqParts, mut req: IppRequestResponse) -> IppResult {
-        let job_id = take_ipp_attribute(
-            req.attributes_mut(),
-            DelimiterTag::OperationAttributes,
-            IppAttribute::JOB_ID,
-        )
-        .and_then(|attr| attr.into_integer().ok());
-        let job = match job_id {
-            Some(job_id) => self.job_snapshot.get(&job_id).await,
-            _ => None,
-        };
-        match job {
-            Some(job) => {
-                let mut resp = IppRequestResponse::new_response(
-                    req.header().version,
-                    StatusCode::SuccessfulOk,
-                    req.header().request_id,
-                );
-                self.add_basic_attributes(&mut resp);
-                let job_attributes = self.job_attributes_for(&head, job.read().await.deref());
-                for attr in job_attributes {
-                    resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
-                }
-                Ok(resp)
-            }
-            _ => Ok(IppRequestResponse::new_response(
-                req.header().version,
-                StatusCode::ClientErrorNotFound,
-                req.header().request_id,
-            )),
+    async fn get_job_attributes(&self, head: ReqParts, req: IppRequestResponse) -> IppResult {
+        let job = self.find_job(req.attributes()).await?;
+        let mut resp = IppRequestResponse::new_response(
+            req.header().version,
+            StatusCode::SuccessfulOk,
+            req.header().request_id,
+        );
+        self.add_basic_attributes(&mut resp);
+        let job_attributes = self.job_attributes_for(&head, job.read().await.deref());
+        for attr in job_attributes {
+            resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
         }
+        Ok(resp)
     }
 
     async fn get_printer_attributes(&self, head: ReqParts, req: IppRequestResponse) -> IppResult {
