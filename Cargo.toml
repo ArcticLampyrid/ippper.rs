@@ -32,6 +32,7 @@ async-compression = { version = "0.4", features = [
 derive_builder = "0.20"
 fmt-derive = "0.1"
 futures = "0.3"
+futures-locks = { version = "0.7", default-features = false }
 hyper = { version = "1.2", features = [
     "http1",
     "http2",
@@ -58,6 +59,7 @@ tokio = { version = "1", features = [
 uuid = "1"
 rustls-pemfile = { version = "2.1", optional = true }
 pin-project-lite = "0.2"
+moka = { version = "0.12", features = ["future"], default-features = false }
 
 [dev-dependencies]
 tokio-util = { version = "0.7", features = [

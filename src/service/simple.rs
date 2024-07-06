@@ -5,6 +5,7 @@ use crate::service::IppService;
 use crate::utils::{get_ipp_attribute, take_ipp_attribute};
 use anyhow;
 use async_compression::futures::bufread;
+use futures_locks::RwLock;
 use http::request::Parts as ReqParts;
 use http::uri::Scheme;
 use ipp::attribute::{IppAttribute, IppAttributes};
@@ -12,7 +13,9 @@ use ipp::model::{DelimiterTag, IppVersion, JobState, Operation, PrinterState, St
 use ipp::payload::IppPayload;
 use ipp::request::IppRequestResponse;
 use ipp::value::IppValue;
+use moka::future::{Cache, CacheBuilder};
 use std::collections::HashSet;
+use std::ops::Deref;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
@@ -134,9 +137,21 @@ pub struct PrinterInfo {
     pdf_versions_supported: Vec<String>,
 }
 
+#[derive(Debug, Clone)]
+struct JobInfo {
+    id: i32,
+    state: JobState,
+    state_reasons: IppValue,
+    attributes: SimpleIppJobAttributes,
+    created_at: Duration,
+    processing_at: Option<Duration>,
+    completed_at: Option<Duration>,
+}
+
 pub struct SimpleIppService<T: SimpleIppServiceHandler> {
     start_time: Instant,
     job_id: AtomicI32,
+    job_snapshot: Cache<i32, RwLock<JobInfo>>,
     host: String,
     basepath: String,
     info: PrinterInfo,
@@ -144,9 +159,13 @@ pub struct SimpleIppService<T: SimpleIppServiceHandler> {
 }
 impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
     pub fn new(info: PrinterInfo, handler: T) -> Self {
+        let job_snapshot = CacheBuilder::new(1000)
+            .time_to_live(Duration::from_secs(60 * 15))
+            .build();
         Self {
             start_time: Instant::now(),
             job_id: AtomicI32::new(1000),
+            job_snapshot,
             host: "defaulthost:631".to_string(),
             basepath: "/".to_string(),
             info,
@@ -459,41 +478,71 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
     fn uptime(&self) -> Duration {
         self.start_time.elapsed()
     }
-    fn job_attributes(
-        &self,
-        head: &ReqParts,
-        job_id: i32,
-        job_state: JobState,
-        job_state_reasons: IppValue,
-    ) -> Vec<IppAttribute> {
-        vec![
+    async fn alloc_job(&self, init: impl FnOnce(i32) -> JobInfo) -> RwLock<JobInfo> {
+        let id = self.job_id.fetch_add(1, Ordering::Relaxed);
+        let data = RwLock::new(init(id));
+        self.job_snapshot.insert(id, data.clone()).await;
+        data
+    }
+    fn job_attributes_for(&self, head: &ReqParts, job: &JobInfo) -> Vec<IppAttribute> {
+        let mut r = vec![
             IppAttribute::new(
                 IppAttribute::JOB_URI,
-                IppValue::Uri(self.make_url(head.uri.scheme(), format!("job/{}", job_id).as_str())),
+                IppValue::Uri(self.make_url(head.uri.scheme(), format!("job/{}", job.id).as_str())),
             ),
-            IppAttribute::new(IppAttribute::JOB_ID, IppValue::Integer(job_id)),
-            IppAttribute::new(IppAttribute::JOB_STATE, IppValue::Enum(job_state as i32)),
-            IppAttribute::new(IppAttribute::JOB_STATE_REASONS, job_state_reasons),
+            IppAttribute::new(IppAttribute::JOB_ID, IppValue::Integer(job.id)),
+            IppAttribute::new(IppAttribute::JOB_STATE, IppValue::Enum(job.state as i32)),
+            IppAttribute::new(IppAttribute::JOB_STATE_REASONS, job.state_reasons.clone()),
             IppAttribute::new(
                 "job-printer-uri",
                 IppValue::Uri(self.make_url(head.uri.scheme(), "/")),
             ),
             IppAttribute::new(
                 IppAttribute::JOB_NAME,
-                IppValue::TextWithoutLanguage("Print job ".to_string() + &job_id.to_string()),
+                IppValue::TextWithoutLanguage(format!("Job #{}", job.id)),
             ),
             IppAttribute::new(
                 "job-originating-user-name",
                 IppValue::TextWithoutLanguage("IppSharing".to_string()),
             ),
-            IppAttribute::new("time-at-creation", IppValue::Integer(0)),
-            IppAttribute::new("time-at-processing", IppValue::Integer(0)),
-            IppAttribute::new("time-at-completed", IppValue::Integer(0)),
             IppAttribute::new(
-                IppAttribute::PRINTER_UP_TIME,
+                "time-at-creation",
+                IppValue::Integer(job.created_at.as_secs() as i32),
+            ),
+            IppAttribute::new(
+                "time-at-processing",
+                job.processing_at
+                    .map_or(IppValue::NoValue, |x| IppValue::Integer(x.as_secs() as i32)),
+            ),
+            IppAttribute::new(
+                "time-at-completed",
+                job.completed_at
+                    .map_or(IppValue::NoValue, |x| IppValue::Integer(x.as_secs() as i32)),
+            ),
+            IppAttribute::new(
+                "job-printer-up-time",
                 IppValue::Integer(self.uptime().as_secs() as i32),
             ),
-        ]
+            IppAttribute::new("media", IppValue::Keyword(job.attributes.media.clone())),
+            IppAttribute::new(
+                "orientation-requested",
+                job.attributes
+                    .orientation
+                    .map_or(IppValue::NoValue, IppValue::from),
+            ),
+            IppAttribute::new("sides", IppValue::Keyword(job.attributes.sides.clone())),
+            IppAttribute::new(
+                "print-color-mode",
+                IppValue::Keyword(job.attributes.print_color_mode.clone()),
+            ),
+        ];
+        if let Some(resolution) = job.attributes.printer_resolution {
+            r.push(IppAttribute::new(
+                "printer-resolution",
+                IppValue::from(resolution),
+            ));
+        }
+        r
     }
 }
 
@@ -529,6 +578,19 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
 
         let job_attributes =
             SimpleIppJobAttributes::take_ipp_attributes(&self.info, &mut attributes);
+
+        let created_at = self.uptime();
+        let job = self
+            .alloc_job(|id| JobInfo {
+                id,
+                state: JobState::Processing,
+                state_reasons: IppValue::Keyword("none".to_string()),
+                attributes: job_attributes.clone(),
+                created_at,
+                processing_at: Some(created_at),
+                completed_at: None,
+            })
+            .await;
 
         let compression = take_ipp_attribute(
             &mut attributes,
@@ -568,19 +630,19 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
                 payload,
             })
             .await?;
+        {
+            let mut job = job.write().await;
+            job.state = JobState::Completed;
+            job.completed_at = Some(self.uptime());
+        }
+
         let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
         self.add_basic_attributes(&mut resp);
         resp.attributes_mut().add(
             DelimiterTag::JobAttributes,
             IppAttribute::new(IppAttribute::JOB_ID, IppValue::Integer(1)),
         );
-        let job_id = self.job_id.fetch_add(1, Ordering::Relaxed);
-        let job_attributes = self.job_attributes(
-            &head,
-            job_id,
-            JobState::Completed,
-            IppValue::Keyword("none".to_string()),
-        );
+        let job_attributes = self.job_attributes_for(&head, job.read().await.deref());
         for attr in job_attributes {
             resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
         }
@@ -607,33 +669,36 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         Ok(resp)
     }
 
-    async fn get_job_attributes(&self, head: ReqParts, req: IppRequestResponse) -> IppResult {
-        let mut resp = IppRequestResponse::new_response(
-            req.header().version,
-            StatusCode::SuccessfulOk,
-            req.header().request_id,
-        );
-        let job_id = get_ipp_attribute(
-            req.attributes(),
+    async fn get_job_attributes(&self, head: ReqParts, mut req: IppRequestResponse) -> IppResult {
+        let job_id = take_ipp_attribute(
+            req.attributes_mut(),
             DelimiterTag::OperationAttributes,
             IppAttribute::JOB_ID,
         )
-        .and_then(|attr| attr.as_integer());
-        match job_id {
-            Some(job_id) => {
-                self.add_basic_attributes(&mut resp);
-                let job_attributes = self.job_attributes(
-                    &head,
-                    *job_id,
-                    JobState::Completed,
-                    IppValue::Keyword("none".to_string()),
+        .and_then(|attr| attr.into_integer().ok());
+        let job = match job_id {
+            Some(job_id) => self.job_snapshot.get(&job_id).await,
+            _ => None,
+        };
+        match job {
+            Some(job) => {
+                let mut resp = IppRequestResponse::new_response(
+                    req.header().version,
+                    StatusCode::SuccessfulOk,
+                    req.header().request_id,
                 );
+                self.add_basic_attributes(&mut resp);
+                let job_attributes = self.job_attributes_for(&head, job.read().await.deref());
                 for attr in job_attributes {
                     resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
                 }
                 Ok(resp)
             }
-            _ => Err(anyhow::Error::msg("failed to get job id")),
+            _ => Ok(IppRequestResponse::new_response(
+                req.header().version,
+                StatusCode::ClientErrorNotFound,
+                req.header().request_id,
+            )),
         }
     }
 
