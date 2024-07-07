@@ -740,7 +740,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let job = self
             .alloc_job(|id| JobInfo {
                 id,
-                state: JobState::Processing,
+                state: JobState::Pending,
                 state_reasons: IppValue::Keyword("none".to_string()),
                 attributes: job_attributes.clone(),
                 created_at,
@@ -770,8 +770,10 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let job_attributes;
         {
             let mut job = job.write().await;
-            job.state = JobState::Processing;
-            job.processing_at = Some(self.uptime());
+            if job.state != JobState::Processing {
+                job.state = JobState::Processing;
+                job.processing_at = Some(self.uptime());
+            }
             job_attributes = job.attributes.clone();
         }
 
