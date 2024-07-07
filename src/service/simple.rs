@@ -2,9 +2,11 @@ use crate::error::IppError;
 use crate::model::{PageOrientation, Resolution, WhichJob};
 use crate::result::IppResult;
 use crate::service::IppService;
-use crate::utils::{get_ipp_attribute, take_ipp_attribute};
+use crate::utils::{
+    decommpress_payload, get_ipp_attribute, get_requested_attributes, take_ipp_attribute,
+    take_requesting_user_name,
+};
 use anyhow;
-use async_compression::futures::bufread;
 use futures_locks::RwLock;
 use http::request::Parts as ReqParts;
 use http::uri::Scheme;
@@ -626,49 +628,6 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         );
         r
     }
-}
-
-fn decommpress_payload(
-    payload: IppPayload,
-    compression: Option<&str>,
-) -> anyhow::Result<IppPayload> {
-    match compression {
-        None => Ok(payload),
-        Some("none") => Ok(payload),
-        Some("gzip") => {
-            let decoder = bufread::GzipDecoder::new(futures::io::BufReader::new(payload));
-            Ok(IppPayload::new_async(decoder))
-        }
-        _ => Err(IppError {
-            code: StatusCode::ClientErrorCompressionNotSupported,
-            msg: StatusCode::ClientErrorCompressionNotSupported.to_string(),
-        }
-        .into()),
-    }
-}
-
-fn get_requested_attributes(r: &IppAttributes) -> HashSet<&str> {
-    get_ipp_attribute(
-        r,
-        DelimiterTag::OperationAttributes,
-        IppAttribute::REQUESTED_ATTRIBUTES,
-    )
-    .map(|attr| {
-        attr.into_iter()
-            .filter_map(|e| e.as_keyword().map(|x| x.as_str()))
-            .collect::<HashSet<_>>()
-    })
-    .unwrap_or_else(|| HashSet::from(["all"]))
-}
-
-fn take_requesting_user_name(r: &mut IppAttributes) -> String {
-    take_ipp_attribute(r, DelimiterTag::OperationAttributes, "requesting-user-name")
-        .and_then(|attr| match attr {
-            IppValue::NameWithoutLanguage(name) => Some(name),
-            IppValue::NameWithLanguage { name, .. } => Some(name),
-            _ => None,
-        })
-        .unwrap_or_else(|| "anonymous".to_string())
 }
 
 impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
