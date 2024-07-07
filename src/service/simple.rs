@@ -662,9 +662,11 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
         self.add_basic_attributes(&mut resp);
         let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref());
-        for attr in job_attributes {
-            resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
-        }
+        let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
+        group
+            .attributes_mut()
+            .extend(job_attributes.into_iter().map(|x| (x.name().to_owned(), x)));
+        resp.attributes_mut().groups_mut().push(group);
         Ok(resp)
     }
 
@@ -705,9 +707,11 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
         self.add_basic_attributes(&mut resp);
         let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref());
-        for attr in job_attributes {
-            resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
-        }
+        let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
+        group
+            .attributes_mut()
+            .extend(job_attributes.into_iter().map(|x| (x.name().to_owned(), x)));
+        resp.attributes_mut().groups_mut().push(group);
         Ok(resp)
     }
 
@@ -754,9 +758,11 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
         self.add_basic_attributes(&mut resp);
         let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref());
-        for attr in job_attributes {
-            resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
-        }
+        let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
+        group
+            .attributes_mut()
+            .extend(job_attributes.into_iter().map(|x| (x.name().to_owned(), x)));
+        resp.attributes_mut().groups_mut().push(group);
         Ok(resp)
     }
 
@@ -779,9 +785,11 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         );
         self.add_basic_attributes(&mut resp);
         let job_attributes = self.job_attributes_for(&head, job.read().await.deref());
-        for attr in job_attributes {
-            resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
-        }
+        let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
+        group
+            .attributes_mut()
+            .extend(job_attributes.into_iter().map(|x| (x.name().to_owned(), x)));
+        resp.attributes_mut().groups_mut().push(group);
         Ok(resp)
     }
 
@@ -853,10 +861,13 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         })
         .unwrap_or_else(|| HashSet::from(["all"]));
         let printer_attributes = self.printer_attributes(&head, &requested_attributes);
-        for attr in printer_attributes {
-            resp.attributes_mut()
-                .add(DelimiterTag::PrinterAttributes, attr);
-        }
+        let mut group = IppAttributeGroup::new(DelimiterTag::PrinterAttributes);
+        group.attributes_mut().extend(
+            printer_attributes
+                .into_iter()
+                .map(|x| (x.name().to_owned(), x)),
+        );
+        resp.attributes_mut().groups_mut().push(group);
         Ok(resp)
     }
 }
