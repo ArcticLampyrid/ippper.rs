@@ -40,6 +40,7 @@ pub struct SimpleIppDocument {
 
 #[derive(fmt_derive::Debug, Clone)]
 pub struct SimpleIppJobAttributes {
+    pub originating_user_name: String,
     pub media: String,
     pub orientation: Option<PageOrientation>,
     pub sides: String,
@@ -48,7 +49,11 @@ pub struct SimpleIppJobAttributes {
 }
 
 impl SimpleIppJobAttributes {
-    pub(crate) fn take_ipp_attributes(info: &PrinterInfo, attributes: &mut IppAttributes) -> Self {
+    pub(crate) fn take_ipp_attributes(
+        info: &PrinterInfo,
+        originating_user_name: String,
+        attributes: &mut IppAttributes,
+    ) -> Self {
         let media = take_ipp_attribute(attributes, DelimiterTag::JobAttributes, "media")
             .and_then(|attr| attr.into_keyword().ok())
             .unwrap_or_else(|| info.media_default.clone());
@@ -78,6 +83,7 @@ impl SimpleIppJobAttributes {
         .and_then(|attr| Resolution::try_from(attr).ok())
         .or(info.printer_resolution_default);
         Self {
+            originating_user_name,
             media,
             orientation,
             sides,
@@ -239,7 +245,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         );
         add_if_requested!(
             IppAttribute::URI_AUTHENTICATION_SUPPORTED,
-            IppValue::Keyword("none".to_string())
+            IppValue::Keyword("requesting-user-name".to_string())
         );
         add_if_requested!(
             IppAttribute::URI_SECURITY_SUPPORTED,
@@ -582,7 +588,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         );
         add_if_requested!(
             description: "job-originating-user-name",
-            IppValue::TextWithoutLanguage("IppSharing".to_string())
+            IppValue::TextWithoutLanguage(job.attributes.originating_user_name.clone())
         );
         add_if_requested!(
             description: "time-at-creation",
@@ -655,6 +661,16 @@ fn get_requested_attributes(r: &IppAttributes) -> HashSet<&str> {
     .unwrap_or_else(|| HashSet::from(["all"]))
 }
 
+fn take_requesting_user_name(r: &mut IppAttributes) -> String {
+    take_ipp_attribute(r, DelimiterTag::OperationAttributes, "requesting-user-name")
+        .and_then(|attr| match attr {
+            IppValue::NameWithoutLanguage(name) => Some(name),
+            IppValue::NameWithLanguage { name, .. } => Some(name),
+            _ => None,
+        })
+        .unwrap_or_else(|| "anonymous".to_string())
+}
+
 impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
     fn version(&self) -> IppVersion {
         IppVersion::v2_0()
@@ -667,8 +683,12 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let req_id = req.header().request_id;
         let version = req.header().version;
 
-        let job_attributes =
-            SimpleIppJobAttributes::take_ipp_attributes(&self.info, &mut attributes);
+        let requesting_user_name = take_requesting_user_name(&mut attributes);
+        let job_attributes = SimpleIppJobAttributes::take_ipp_attributes(
+            &self.info,
+            requesting_user_name,
+            &mut attributes,
+        );
 
         let created_at = self.uptime();
         let job = self
@@ -733,8 +753,12 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let req_id = req.header().request_id;
         let version = req.header().version;
 
-        let job_attributes =
-            SimpleIppJobAttributes::take_ipp_attributes(&self.info, &mut attributes);
+        let requesting_user_name = take_requesting_user_name(&mut attributes);
+        let job_attributes = SimpleIppJobAttributes::take_ipp_attributes(
+            &self.info,
+            requesting_user_name,
+            &mut attributes,
+        );
 
         let created_at = self.uptime();
         let job = self
