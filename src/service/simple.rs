@@ -207,16 +207,13 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             ),
         );
     }
-    fn printer_attributes(
-        &self,
-        head: &ReqParts,
-        requested: Option<&HashSet<&str>>,
-    ) -> Vec<IppAttribute> {
+    fn printer_attributes(&self, head: &ReqParts, requested: &HashSet<&str>) -> Vec<IppAttribute> {
         let mut r = Vec::<IppAttribute>::new();
+        let requested_all = requested.contains("all");
 
         macro_rules! is_requested {
             ($name:expr) => {
-                requested.map_or(true, |x| x.contains($name))
+                requested_all || requested.contains($name)
             };
         }
         macro_rules! add_if_requested {
@@ -854,8 +851,8 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
                 .filter_map(|e| e.as_keyword().map(|x| x.as_str()))
                 .collect::<HashSet<_>>()
         })
-        .filter(|x| !x.contains("all"));
-        let printer_attributes = self.printer_attributes(&head, requested_attributes.as_ref());
+        .unwrap_or_else(|| HashSet::from(["all"]));
+        let printer_attributes = self.printer_attributes(&head, &requested_attributes);
         for attr in printer_attributes {
             resp.attributes_mut()
                 .add(DelimiterTag::PrinterAttributes, attr);
