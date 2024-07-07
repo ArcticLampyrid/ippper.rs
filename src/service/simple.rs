@@ -529,64 +529,95 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             IppAttribute::new(IppAttribute::JOB_STATE_REASONS, job.state_reasons.clone()),
         ]
     }
-    fn job_attributes_for(&self, head: &ReqParts, job: &JobInfo) -> Vec<IppAttribute> {
-        let mut r = vec![
-            IppAttribute::new(
-                IppAttribute::JOB_URI,
-                IppValue::Uri(self.make_url(head.uri.scheme(), format!("job/{}", job.id).as_str())),
-            ),
-            IppAttribute::new(IppAttribute::JOB_ID, IppValue::Integer(job.id)),
-            IppAttribute::new(IppAttribute::JOB_STATE, IppValue::Enum(job.state as i32)),
-            IppAttribute::new(IppAttribute::JOB_STATE_REASONS, job.state_reasons.clone()),
-            IppAttribute::new(
-                "job-printer-uri",
-                IppValue::Uri(self.make_url(head.uri.scheme(), "/")),
-            ),
-            IppAttribute::new(
-                IppAttribute::JOB_NAME,
-                IppValue::TextWithoutLanguage(format!("Job #{}", job.id)),
-            ),
-            IppAttribute::new(
-                "job-originating-user-name",
-                IppValue::TextWithoutLanguage("IppSharing".to_string()),
-            ),
-            IppAttribute::new(
-                "time-at-creation",
-                IppValue::Integer(job.created_at.as_secs() as i32),
-            ),
-            IppAttribute::new(
-                "time-at-processing",
-                job.processing_at
-                    .map_or(IppValue::NoValue, |x| IppValue::Integer(x.as_secs() as i32)),
-            ),
-            IppAttribute::new(
-                "time-at-completed",
-                job.completed_at
-                    .map_or(IppValue::NoValue, |x| IppValue::Integer(x.as_secs() as i32)),
-            ),
-            IppAttribute::new(
-                "job-printer-up-time",
-                IppValue::Integer(self.uptime().as_secs() as i32),
-            ),
-            IppAttribute::new("media", IppValue::Keyword(job.attributes.media.clone())),
-            IppAttribute::new(
-                "orientation-requested",
-                job.attributes
-                    .orientation
-                    .map_or(IppValue::NoValue, IppValue::from),
-            ),
-            IppAttribute::new("sides", IppValue::Keyword(job.attributes.sides.clone())),
-            IppAttribute::new(
-                "print-color-mode",
-                IppValue::Keyword(job.attributes.print_color_mode.clone()),
-            ),
-        ];
-        if let Some(resolution) = job.attributes.printer_resolution {
-            r.push(IppAttribute::new(
-                "printer-resolution",
-                IppValue::from(resolution),
-            ));
+    fn job_attributes_for(
+        &self,
+        head: &ReqParts,
+        job: &JobInfo,
+        requested: &HashSet<&str>,
+    ) -> Vec<IppAttribute> {
+        let mut r = Vec::<IppAttribute>::new();
+
+        let requested_all = requested.contains("all");
+        let requested_job_description = requested_all || requested.contains("job-description");
+        let requested_job_template = requested_all || requested.contains("job-template");
+        macro_rules! is_requested {
+            (description : $name:expr) => {
+                requested_job_description || requested.contains($name)
+            };
+            (template : $name:expr) => {
+                requested_job_template || requested.contains($name)
+            };
         }
+        macro_rules! add_if_requested {
+            ($kind:ident : $name:expr, $value:expr) => {
+                if is_requested!($kind : $name) {
+                    r.push(IppAttribute::new($name, $value));
+                }
+            };
+        }
+        macro_rules! optional_add_if_requested {
+            ($kind:ident : $name:expr, $value:expr) => {
+                if is_requested!($kind : $name) {
+                    if let Some(value) = $value {
+                        r.push(IppAttribute::new($name, value));
+                    }
+                }
+            };
+        }
+
+        add_if_requested!(
+            description: IppAttribute::JOB_URI,
+            IppValue::Uri(self.make_url(head.uri.scheme(), format!("job/{}", job.id).as_str()))
+        );
+        add_if_requested!(description: IppAttribute::JOB_ID, IppValue::Integer(job.id));
+        add_if_requested!(description: IppAttribute::JOB_STATE, IppValue::Enum(job.state as i32));
+        add_if_requested!(description: IppAttribute::JOB_STATE_REASONS, job.state_reasons.clone());
+        add_if_requested!(
+            description: "job-printer-uri",
+            IppValue::Uri(self.make_url(head.uri.scheme(), "/"))
+        );
+        add_if_requested!(
+            description: IppAttribute::JOB_NAME,
+            IppValue::TextWithoutLanguage(format!("Job #{}", job.id))
+        );
+        add_if_requested!(
+            description: "job-originating-user-name",
+            IppValue::TextWithoutLanguage("IppSharing".to_string())
+        );
+        add_if_requested!(
+            description: "time-at-creation",
+            IppValue::Integer(job.created_at.as_secs() as i32)
+        );
+        add_if_requested!(
+            description: "time-at-processing",
+            job.processing_at
+                .map_or(IppValue::NoValue, |x| IppValue::Integer(x.as_secs() as i32))
+        );
+        add_if_requested!(
+            description: "time-at-completed",
+            job.completed_at
+                .map_or(IppValue::NoValue, |x| IppValue::Integer(x.as_secs() as i32))
+        );
+        add_if_requested!(
+            description: "job-printer-up-time",
+            IppValue::Integer(self.uptime().as_secs() as i32)
+        );
+        add_if_requested!(template: "media", IppValue::Keyword(job.attributes.media.clone()));
+        add_if_requested!(
+            template: "orientation-requested",
+            job.attributes
+                .orientation
+                .map_or(IppValue::NoValue, IppValue::from)
+        );
+        add_if_requested!(template: "sides", IppValue::Keyword(job.attributes.sides.clone()));
+        add_if_requested!(
+            template: "print-color-mode",
+            IppValue::Keyword(job.attributes.print_color_mode.clone())
+        );
+        optional_add_if_requested!(
+            template: "printer-resolution",
+            job.attributes.printer_resolution.map(IppValue::from)
+        );
         r
     }
 }
@@ -608,6 +639,20 @@ fn decommpress_payload(
         }
         .into()),
     }
+}
+
+fn get_requested_attributes(r: &IppAttributes) -> HashSet<&str> {
+    get_ipp_attribute(
+        r,
+        DelimiterTag::OperationAttributes,
+        IppAttribute::REQUESTED_ATTRIBUTES,
+    )
+    .map(|attr| {
+        attr.into_iter()
+            .filter_map(|e| e.as_keyword().map(|x| x.as_str()))
+            .collect::<HashSet<_>>()
+    })
+    .unwrap_or_else(|| HashSet::from(["all"]))
 }
 
 impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
@@ -778,13 +823,15 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
 
     async fn get_job_attributes(&self, head: ReqParts, req: IppRequestResponse) -> IppResult {
         let job = self.find_job(req.attributes()).await?;
+        let requested_attributes = get_requested_attributes(req.attributes());
         let mut resp = IppRequestResponse::new_response(
             req.header().version,
             StatusCode::SuccessfulOk,
             req.header().request_id,
         );
         self.add_basic_attributes(&mut resp);
-        let job_attributes = self.job_attributes_for(&head, job.read().await.deref());
+        let job_attributes =
+            self.job_attributes_for(&head, job.read().await.deref(), &requested_attributes);
         let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
         group
             .attributes_mut()
@@ -815,6 +862,8 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             _ => WhichJob::NotCompleted,
         };
 
+        let requested_attributes = get_requested_attributes(req.attributes());
+
         let mut resp = IppRequestResponse::new_response(
             req.header().version,
             StatusCode::SuccessfulOk,
@@ -825,7 +874,8 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         for (_, job) in self.job_snapshot.iter() {
             let job = job.read().await;
             if which_jobs == WhichJob::from(job.state) {
-                let job_attributes = self.job_attributes_for(&head, job.deref());
+                let job_attributes =
+                    self.job_attributes_for(&head, job.deref(), &requested_attributes);
                 let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
                 group
                     .attributes_mut()
@@ -849,17 +899,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             req.header().request_id,
         );
         self.add_basic_attributes(&mut resp);
-        let requested_attributes = get_ipp_attribute(
-            req.attributes(),
-            DelimiterTag::OperationAttributes,
-            IppAttribute::REQUESTED_ATTRIBUTES,
-        )
-        .map(|attr| {
-            attr.into_iter()
-                .filter_map(|e| e.as_keyword().map(|x| x.as_str()))
-                .collect::<HashSet<_>>()
-        })
-        .unwrap_or_else(|| HashSet::from(["all"]));
+        let requested_attributes = get_requested_attributes(req.attributes());
         let printer_attributes = self.printer_attributes(&head, &requested_attributes);
         let mut group = IppAttributeGroup::new(DelimiterTag::PrinterAttributes);
         group.attributes_mut().extend(
