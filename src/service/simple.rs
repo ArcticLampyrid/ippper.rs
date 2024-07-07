@@ -1,5 +1,5 @@
 use crate::error::IppError;
-use crate::model::{PageOrientation, Resolution};
+use crate::model::{PageOrientation, Resolution, WhichJob};
 use crate::result::IppResult;
 use crate::service::IppService;
 use crate::utils::{get_ipp_attribute, take_ipp_attribute};
@@ -8,7 +8,7 @@ use async_compression::futures::bufread;
 use futures_locks::RwLock;
 use http::request::Parts as ReqParts;
 use http::uri::Scheme;
-use ipp::attribute::{IppAttribute, IppAttributes};
+use ipp::attribute::{IppAttribute, IppAttributeGroup, IppAttributes};
 use ipp::model::{DelimiterTag, IppVersion, JobState, Operation, PrinterState, StatusCode};
 use ipp::payload::IppPayload;
 use ipp::request::IppRequestResponse;
@@ -284,6 +284,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 IppValue::Enum(Operation::SendDocument as i32),
                 IppValue::Enum(Operation::CancelJob as i32),
                 IppValue::Enum(Operation::GetJobAttributes as i32),
+                IppValue::Enum(Operation::GetJobs as i32),
                 IppValue::Enum(Operation::GetPrinterAttributes as i32),
             ])
         );
@@ -784,6 +785,55 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         for attr in job_attributes {
             resp.attributes_mut().add(DelimiterTag::JobAttributes, attr);
         }
+        Ok(resp)
+    }
+
+    async fn get_jobs(&self, head: ReqParts, mut req: IppRequestResponse) -> IppResult {
+        let mut count = 0;
+        let limit = take_ipp_attribute(
+            req.attributes_mut(),
+            DelimiterTag::OperationAttributes,
+            "limit",
+        )
+        .and_then(|attr| attr.into_integer().ok());
+
+        let which_jobs = take_ipp_attribute(
+            req.attributes_mut(),
+            DelimiterTag::OperationAttributes,
+            "which-jobs",
+        )
+        .and_then(|attr| attr.into_keyword().ok());
+
+        let which_jobs = match which_jobs.as_deref() {
+            Some("completed") => WhichJob::Completed,
+            Some("not-completed") => WhichJob::NotCompleted,
+            _ => WhichJob::NotCompleted,
+        };
+
+        let mut resp = IppRequestResponse::new_response(
+            req.header().version,
+            StatusCode::SuccessfulOk,
+            req.header().request_id,
+        );
+        self.add_basic_attributes(&mut resp);
+
+        for (_, job) in self.job_snapshot.iter() {
+            let job = job.read().await;
+            if which_jobs == WhichJob::from(job.state) {
+                let job_attributes = self.job_attributes_for(&head, job.deref());
+                let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
+                group
+                    .attributes_mut()
+                    .extend(job_attributes.into_iter().map(|x| (x.name().to_owned(), x)));
+                resp.attributes_mut().groups_mut().push(group);
+
+                count += 1;
+                if limit.map_or(false, |x| count >= x) {
+                    break;
+                }
+            }
+        }
+
         Ok(resp)
     }
 

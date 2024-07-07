@@ -1,4 +1,4 @@
-use ipp::value::IppValue;
+use ipp::{model::JobState, value::IppValue};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PageOrientation {
@@ -96,6 +96,24 @@ impl From<Resolution> for IppValue {
             cross_feed: value.cross_feed,
             feed: value.feed,
             units: value.units,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WhichJob {
+    NotCompleted,
+    Completed,
+}
+
+impl From<JobState> for WhichJob {
+    fn from(value: JobState) -> Self {
+        match value {
+            JobState::Pending
+            | JobState::PendingHeld
+            | JobState::Processing
+            | JobState::ProcessingStopped => WhichJob::NotCompleted,
+            JobState::Canceled | JobState::Aborted | JobState::Completed => WhichJob::Completed,
         }
     }
 }
