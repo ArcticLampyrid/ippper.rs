@@ -670,20 +670,29 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         )
         .and_then(|attr| attr.into_keyword().ok());
         let payload = decommpress_payload(req.into_payload(), compression.as_deref())?;
-        self.handler
+        let document_handled = self
+            .handler
             .handle_document(SimpleIppDocument {
                 format,
                 job_attributes,
                 payload,
             })
-            .await?;
+            .await;
         {
             let mut job = job.write().await;
-            job.state = JobState::Completed;
+            job.state = if document_handled.is_ok() {
+                JobState::Completed
+            } else {
+                JobState::Aborted
+            };
             job.completed_at = Some(self.uptime());
         }
 
-        let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
+        let mut resp = if let Err(error) = document_handled {
+            self.build_error_response(version, req_id, error)
+        } else {
+            IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id)
+        };
         self.add_basic_attributes(&mut resp);
         let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref());
         let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
@@ -772,20 +781,29 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         )
         .and_then(|attr| attr.into_keyword().ok());
         let payload = decommpress_payload(req.into_payload(), compression.as_deref())?;
-        self.handler
+        let document_handled = self
+            .handler
             .handle_document(SimpleIppDocument {
                 format,
                 job_attributes,
                 payload,
             })
-            .await?;
+            .await;
         {
             let mut job = job.write().await;
-            job.state = JobState::Completed;
+            job.state = if document_handled.is_ok() {
+                JobState::Completed
+            } else {
+                JobState::Aborted
+            };
             job.completed_at = Some(self.uptime());
         }
 
-        let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
+        let mut resp = if let Err(error) = document_handled {
+            self.build_error_response(version, req_id, error)
+        } else {
+            IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id)
+        };
         self.add_basic_attributes(&mut resp);
         let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref());
         let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
