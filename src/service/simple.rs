@@ -157,6 +157,7 @@ pub struct PrinterInfo {
 struct JobInfo {
     id: i32,
     state: JobState,
+    state_message: String,
     state_reasons: IppValue,
     attributes: SimpleIppJobAttributes,
     created_at: Duration,
@@ -592,6 +593,10 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             ),
             IppAttribute::new(IppAttribute::JOB_ID, IppValue::Integer(job.id)),
             IppAttribute::new(IppAttribute::JOB_STATE, IppValue::Enum(job.state as i32)),
+            IppAttribute::new(
+                "job-state-message",
+                IppValue::TextWithoutLanguage(job.state_message.clone()),
+            ),
             IppAttribute::new(IppAttribute::JOB_STATE_REASONS, job.state_reasons.clone()),
         ]
     }
@@ -637,6 +642,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         );
         add_if_requested!(description: IppAttribute::JOB_ID, IppValue::Integer(job.id));
         add_if_requested!(description: IppAttribute::JOB_STATE, IppValue::Enum(job.state as i32));
+        add_if_requested!(description: "job-state-message", IppValue::TextWithoutLanguage(job.state_message.clone()));
         add_if_requested!(description: IppAttribute::JOB_STATE_REASONS, job.state_reasons.clone());
         add_if_requested!(
             description: "job-printer-uri",
@@ -712,6 +718,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             .alloc_job(|id| JobInfo {
                 id,
                 state: JobState::Processing,
+                state_message: "Processing".to_string(),
                 state_reasons: IppValue::Keyword("none".to_string()),
                 attributes: job_attributes.clone(),
                 created_at,
@@ -738,10 +745,12 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             .await;
         {
             let mut job = job.write().await;
-            job.state = if document_handled.is_ok() {
-                JobState::Completed
+            if let Err(ref error) = document_handled {
+                job.state = JobState::Aborted;
+                job.state_message = format!("Aborted: {}", error);
             } else {
-                JobState::Aborted
+                job.state = JobState::Completed;
+                job.state_message = "Completed".to_string();
             };
             job.completed_at = Some(self.uptime());
         }
@@ -791,6 +800,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             .alloc_job(|id| JobInfo {
                 id,
                 state: JobState::Pending,
+                state_message: "Pending".to_string(),
                 state_reasons: IppValue::Keyword("none".to_string()),
                 attributes: job_attributes.clone(),
                 created_at,
@@ -822,6 +832,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             let mut job = job.write().await;
             if job.state != JobState::Processing {
                 job.state = JobState::Processing;
+                job.state_message = "Processing".to_string();
                 job.processing_at = Some(self.uptime());
             }
             job_attributes = job.attributes.clone();
@@ -849,10 +860,12 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             .await;
         {
             let mut job = job.write().await;
-            job.state = if document_handled.is_ok() {
-                JobState::Completed
+            if let Err(ref error) = document_handled {
+                job.state = JobState::Aborted;
+                job.state_message = format!("Aborted: {}", error);
             } else {
-                JobState::Aborted
+                job.state = JobState::Completed;
+                job.state_message = "Completed".to_string();
             };
             job.completed_at = Some(self.uptime());
         }
