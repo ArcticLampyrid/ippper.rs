@@ -105,6 +105,8 @@ pub struct PrinterInfo {
     make_and_model: Option<String>,
     #[builder(default = r#"None"#)]
     uuid: Option<Uuid>,
+    #[builder(default = r#"true"#)]
+    color_supported: bool,
     #[builder(default = r#"vec!["application/pdf".to_string()]"#)]
     document_format_supported: Vec<String>,
     #[builder(default = r#""application/pdf".to_string()"#)]
@@ -306,6 +308,10 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 IppValue::Enum(Operation::GetJobs as i32),
                 IppValue::Enum(Operation::GetPrinterAttributes as i32),
             ])
+        );
+        add_if_requested!(
+            description: IppAttribute::COLOR_SUPPORTED,
+            IppValue::Boolean(self.info.color_supported)
         );
         add_if_requested!(description: "multiple-document-jobs-supported", IppValue::Boolean(false));
         add_if_requested!(
