@@ -313,6 +313,13 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             description: IppAttribute::COLOR_SUPPORTED,
             IppValue::Boolean(self.info.color_supported)
         );
+        add_if_requested!(
+            description: "which-jobs-supported",
+            IppValue::Array(vec![
+                IppValue::Keyword("completed".to_string()),
+                IppValue::Keyword("not-completed".to_string()),
+            ])
+        );
         add_if_requested!(description: "multiple-document-jobs-supported", IppValue::Boolean(false));
         add_if_requested!(
             description: IppAttribute::CHARSET_CONFIGURED,
