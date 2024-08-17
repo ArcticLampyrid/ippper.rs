@@ -227,22 +227,27 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
     fn printer_attributes(&self, head: &ReqParts, requested: &HashSet<&str>) -> Vec<IppAttribute> {
         let mut r = Vec::<IppAttribute>::new();
         let requested_all = requested.contains("all");
-
+        let requested_printer_description =
+            requested_all || requested.contains("printer-description");
+        let requested_job_template = requested_all || requested.contains("job-template");
         macro_rules! is_requested {
-            ($name:expr) => {
-                requested_all || requested.contains($name)
+            (description : $name:expr) => {
+                requested_printer_description || requested.contains($name)
+            };
+            (template : $name:expr) => {
+                requested_job_template || requested.contains($name)
             };
         }
         macro_rules! add_if_requested {
-            ($name:expr, $value:expr) => {
-                if is_requested!($name) {
+            ($kind:ident : $name:expr, $value:expr) => {
+                if is_requested!($kind : $name) {
                     r.push(IppAttribute::new($name, $value));
                 }
             };
         }
         macro_rules! optional_add_if_requested {
-            ($name:expr, $value:expr) => {
-                if is_requested!($name) {
+            ($kind:ident : $name:expr, $value:expr) => {
+                if is_requested!($kind : $name) {
                     if let Some(value) = $value {
                         r.push(IppAttribute::new($name, value));
                     }
@@ -251,15 +256,15 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         }
 
         add_if_requested!(
-            IppAttribute::PRINTER_URI_SUPPORTED,
+            description: IppAttribute::PRINTER_URI_SUPPORTED,
             IppValue::Uri(self.make_url(head.uri.scheme(), "/"))
         );
         add_if_requested!(
-            IppAttribute::URI_AUTHENTICATION_SUPPORTED,
+            description: IppAttribute::URI_AUTHENTICATION_SUPPORTED,
             IppValue::Keyword("requesting-user-name".to_string())
         );
         add_if_requested!(
-            IppAttribute::URI_SECURITY_SUPPORTED,
+            description: IppAttribute::URI_SECURITY_SUPPORTED,
             IppValue::Keyword(
                 match head.uri.scheme_str() {
                     Some("ipps") => "tls",
@@ -270,19 +275,19 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             )
         );
         add_if_requested!(
-            IppAttribute::PRINTER_NAME,
+            description: IppAttribute::PRINTER_NAME,
             IppValue::NameWithoutLanguage(self.info.name.clone())
         );
         add_if_requested!(
-            IppAttribute::PRINTER_STATE,
+            description: IppAttribute::PRINTER_STATE,
             IppValue::Enum(PrinterState::Idle as i32)
         );
         add_if_requested!(
-            IppAttribute::PRINTER_STATE_REASONS,
+            description: IppAttribute::PRINTER_STATE_REASONS,
             IppValue::Keyword("none".to_string())
         );
         add_if_requested!(
-            IppAttribute::IPP_VERSIONS_SUPPORTED,
+            description: IppAttribute::IPP_VERSIONS_SUPPORTED,
             IppValue::Array(vec![
                 IppValue::Keyword("1.0".to_string()),
                 IppValue::Keyword("1.1".to_string()),
@@ -290,7 +295,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             ])
         );
         add_if_requested!(
-            IppAttribute::OPERATIONS_SUPPORTED,
+            description: IppAttribute::OPERATIONS_SUPPORTED,
             IppValue::Array(vec![
                 IppValue::Enum(Operation::PrintJob as i32),
                 IppValue::Enum(Operation::ValidateJob as i32),
@@ -302,29 +307,29 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 IppValue::Enum(Operation::GetPrinterAttributes as i32),
             ])
         );
-        add_if_requested!("multiple-document-jobs-supported", IppValue::Boolean(false));
+        add_if_requested!(description: "multiple-document-jobs-supported", IppValue::Boolean(false));
         add_if_requested!(
-            IppAttribute::CHARSET_CONFIGURED,
+            description: IppAttribute::CHARSET_CONFIGURED,
             IppValue::Charset("utf-8".to_string())
         );
         add_if_requested!(
-            IppAttribute::CHARSET_SUPPORTED,
+            description: IppAttribute::CHARSET_SUPPORTED,
             IppValue::Charset("utf-8".to_string())
         );
         add_if_requested!(
-            IppAttribute::NATURAL_LANGUAGE_CONFIGURED,
+            description: IppAttribute::NATURAL_LANGUAGE_CONFIGURED,
             IppValue::NaturalLanguage("en".to_string())
         );
         add_if_requested!(
-            IppAttribute::GENERATED_NATURAL_LANGUAGE_SUPPORTED,
+            description: IppAttribute::GENERATED_NATURAL_LANGUAGE_SUPPORTED,
             IppValue::NaturalLanguage("en".to_string())
         );
         add_if_requested!(
-            IppAttribute::DOCUMENT_FORMAT_DEFAULT,
+            description: IppAttribute::DOCUMENT_FORMAT_DEFAULT,
             IppValue::MimeMediaType(self.info.document_format_default.clone())
         );
         add_if_requested!(
-            IppAttribute::DOCUMENT_FORMAT_SUPPORTED,
+            description: IppAttribute::DOCUMENT_FORMAT_SUPPORTED,
             IppValue::Array(
                 self.info
                     .document_format_supported
@@ -335,30 +340,30 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             )
         );
         add_if_requested!(
-            IppAttribute::PRINTER_IS_ACCEPTING_JOBS,
+            description: IppAttribute::PRINTER_IS_ACCEPTING_JOBS,
             IppValue::Boolean(true)
         );
         add_if_requested!(
-            IppAttribute::PDL_OVERRIDE_SUPPORTED,
+            description: IppAttribute::PDL_OVERRIDE_SUPPORTED,
             IppValue::Keyword("attempted".to_string())
         );
         add_if_requested!(
-            IppAttribute::PRINTER_UP_TIME,
+            description: IppAttribute::PRINTER_UP_TIME,
             IppValue::Integer(self.uptime().as_secs() as i32)
         );
         add_if_requested!(
-            IppAttribute::COMPRESSION_SUPPORTED,
+            description: IppAttribute::COMPRESSION_SUPPORTED,
             IppValue::Array(vec![
                 IppValue::Keyword("none".to_string()),
                 IppValue::Keyword("gzip".to_string()),
             ])
         );
         add_if_requested!(
-            IppAttribute::MEDIA_DEFAULT,
+            template: IppAttribute::MEDIA_DEFAULT,
             IppValue::Keyword(self.info.media_default.clone())
         );
         add_if_requested!(
-            IppAttribute::MEDIA_SUPPORTED,
+            template: IppAttribute::MEDIA_SUPPORTED,
             IppValue::Array(
                 self.info
                     .media_supported
@@ -369,14 +374,14 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             )
         );
         add_if_requested!(
-            IppAttribute::ORIENTATION_REQUESTED_DEFAULT,
+            template: IppAttribute::ORIENTATION_REQUESTED_DEFAULT,
             self.info
                 .orientation_default
                 .map(|orientation| orientation.into())
                 .unwrap_or(IppValue::NoValue)
         );
         add_if_requested!(
-            IppAttribute::ORIENTATION_REQUESTED_SUPPORTED,
+            template: IppAttribute::ORIENTATION_REQUESTED_SUPPORTED,
             IppValue::Array(
                 self.info
                     .orientation_supported
@@ -387,11 +392,11 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             )
         );
         add_if_requested!(
-            IppAttribute::SIDES_DEFAULT,
+            template: IppAttribute::SIDES_DEFAULT,
             IppValue::Keyword(self.info.sides_default.clone())
         );
         add_if_requested!(
-            IppAttribute::SIDES_SUPPORTED,
+            template: IppAttribute::SIDES_SUPPORTED,
             IppValue::Array(
                 self.info
                     .sides_supported
@@ -402,11 +407,11 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             )
         );
         add_if_requested!(
-            IppAttribute::PRINT_COLOR_MODE_DEFAULT,
+            template: IppAttribute::PRINT_COLOR_MODE_DEFAULT,
             IppValue::Keyword(self.info.print_color_mode_default.clone())
         );
         add_if_requested!(
-            IppAttribute::PRINT_COLOR_MODE_SUPPORTED,
+            template: IppAttribute::PRINT_COLOR_MODE_SUPPORTED,
             IppValue::Array(
                 self.info
                     .print_color_mode_supported
@@ -417,7 +422,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             )
         );
         optional_add_if_requested!(
-            "document-format-preferred",
+            description: "document-format-preferred",
             self.info
                 .document_format_preferred
                 .clone()
@@ -425,7 +430,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         );
         if !self.info.printer_resolution_supported.is_empty() {
             add_if_requested!(
-                IppAttribute::PRINTER_RESOLUTION_SUPPORTED,
+                template: IppAttribute::PRINTER_RESOLUTION_SUPPORTED,
                 IppValue::Array(
                     self.info
                         .printer_resolution_supported
@@ -437,12 +442,12 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             );
         }
         optional_add_if_requested!(
-            IppAttribute::PRINTER_RESOLUTION_DEFAULT,
+            template: IppAttribute::PRINTER_RESOLUTION_DEFAULT,
             self.info.printer_resolution_default.map(IppValue::from)
         );
         if !self.info.pdf_versions_supported.is_empty() {
             add_if_requested!(
-                "pdf-versions-supported",
+                description: "pdf-versions-supported",
                 IppValue::Array(
                     self.info
                         .pdf_versions_supported
@@ -455,7 +460,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         }
         if !self.info.urf_supported.is_empty() {
             add_if_requested!(
-                "urf-supported",
+                description: "urf-supported",
                 IppValue::Array(
                     self.info
                         .urf_supported
@@ -468,7 +473,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         }
         if !self.info.pwg_raster_document_type_supported.is_empty() {
             add_if_requested!(
-                "pwg-raster-document-type-supported",
+                description: "pwg-raster-document-type-supported",
                 IppValue::Array(
                     self.info
                         .pwg_raster_document_type_supported
@@ -485,7 +490,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             .is_empty()
         {
             add_if_requested!(
-                "pwg-raster-document-resolution-supported",
+                description: "pwg-raster-document-resolution-supported",
                 IppValue::Array(
                     self.info
                         .pwg_raster_document_resolution_supported
@@ -497,13 +502,13 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             );
         }
         optional_add_if_requested!(
-            "pwg-raster-document-sheet-back",
+            description: "pwg-raster-document-sheet-back",
             self.info
                 .pwg_raster_document_sheet_back
                 .clone()
                 .map(IppValue::Keyword)
         );
-        if is_requested!("job-creation-attributes-supported") {
+        if is_requested!(description: "job-creation-attributes-supported") {
             let mut job_creation_attributes_supported = vec![
                 IppValue::Keyword("job-name".to_string()),
                 IppValue::Keyword("media".to_string()),
@@ -521,18 +526,18 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             ));
         }
         optional_add_if_requested!(
-            IppAttribute::PRINTER_INFO,
+            description: IppAttribute::PRINTER_INFO,
             self.info.info.clone().map(IppValue::TextWithoutLanguage)
         );
         optional_add_if_requested!(
-            IppAttribute::PRINTER_MAKE_AND_MODEL,
+            description: IppAttribute::PRINTER_MAKE_AND_MODEL,
             self.info
                 .make_and_model
                 .clone()
                 .map(IppValue::TextWithoutLanguage)
         );
         optional_add_if_requested!(
-            "printer-uuid",
+            description: "printer-uuid",
             self.info.uuid.map(|uuid| IppValue::Uri(
                 uuid.urn()
                     .encode_lower(&mut Uuid::encode_buffer())
