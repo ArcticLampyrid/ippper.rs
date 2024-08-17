@@ -9,7 +9,6 @@ use crate::utils::{
 use anyhow;
 use futures_locks::RwLock;
 use http::request::Parts as ReqParts;
-use http::uri::Scheme;
 use ipp::attribute::{IppAttribute, IppAttributeGroup, IppAttributes};
 use ipp::model::{DelimiterTag, IppVersion, JobState, Operation, PrinterState, StatusCode};
 use ipp::payload::IppPayload;
@@ -200,14 +199,28 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
     pub fn set_info(&mut self, info: PrinterInfo) {
         self.info = info;
     }
-    fn make_url(&self, scheme: Option<&Scheme>, path: &str) -> String {
+    fn make_url(&self, head: &ReqParts, path: &str) -> String {
         let basepath = self.basepath.trim_start_matches('/').trim_end_matches('/');
         let slash_before_basepath = if basepath.is_empty() { "" } else { "/" };
-        let slash_before_path = if path.starts_with('/') { "" } else { "/" };
-        let scheme = scheme.map_or("ipp", |x| x.as_str());
+        let slash_before_path = if path.starts_with('/') || path.is_empty() {
+            ""
+        } else {
+            "/"
+        };
+        let scheme = head.uri.scheme().map_or("ipp", |x| x.as_str());
+        let host = if let Some(host) = head.headers.get("Host") {
+            let from_user = host.to_str().unwrap_or(self.host.as_str());
+            if !from_user.contains(':') && self.host.contains(':') {
+                format!("{}:{}", from_user, self.host.split(':').last().unwrap())
+            } else {
+                from_user.to_string()
+            }
+        } else {
+            self.host.clone()
+        };
         format!(
             "{}://{}{}{}{}{}",
-            scheme, self.host, slash_before_basepath, basepath, slash_before_path, path
+            scheme, host, slash_before_basepath, basepath, slash_before_path, path
         )
     }
     fn add_basic_attributes(&self, resp: &mut IppRequestResponse) {
@@ -259,7 +272,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
 
         add_if_requested!(
             description: IppAttribute::PRINTER_URI_SUPPORTED,
-            IppValue::Uri(self.make_url(head.uri.scheme(), "/"))
+            IppValue::Uri(self.make_url(head, "/"))
         );
         add_if_requested!(
             description: IppAttribute::URI_AUTHENTICATION_SUPPORTED,
@@ -607,7 +620,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         vec![
             IppAttribute::new(
                 IppAttribute::JOB_URI,
-                IppValue::Uri(self.make_url(head.uri.scheme(), format!("job/{}", job.id).as_str())),
+                IppValue::Uri(self.make_url(head, format!("job/{}", job.id).as_str())),
             ),
             IppAttribute::new(IppAttribute::JOB_ID, IppValue::Integer(job.id)),
             IppAttribute::new(IppAttribute::JOB_STATE, IppValue::Enum(job.state as i32)),
@@ -656,7 +669,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
 
         add_if_requested!(
             description: IppAttribute::JOB_URI,
-            IppValue::Uri(self.make_url(head.uri.scheme(), format!("job/{}", job.id).as_str()))
+            IppValue::Uri(self.make_url(head, format!("job/{}", job.id).as_str()))
         );
         add_if_requested!(description: IppAttribute::JOB_ID, IppValue::Integer(job.id));
         add_if_requested!(description: IppAttribute::JOB_STATE, IppValue::Enum(job.state as i32));
@@ -664,7 +677,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         add_if_requested!(description: IppAttribute::JOB_STATE_REASONS, job.state_reasons.clone());
         add_if_requested!(
             description: "job-printer-uri",
-            IppValue::Uri(self.make_url(head.uri.scheme(), "/"))
+            IppValue::Uri(self.make_url(head, ""))
         );
         add_if_requested!(
             description: IppAttribute::JOB_NAME,
