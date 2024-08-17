@@ -143,6 +143,14 @@ pub struct PrinterInfo {
         "pwg-5102.3".to_string(),
     ]"#)]
     pdf_versions_supported: Vec<String>,
+    #[builder(default = r#"vec![]"#)]
+    urf_supported: Vec<String>,
+    #[builder(default = r#"vec![]"#)]
+    pwg_raster_document_type_supported: Vec<String>,
+    #[builder(default = r#"vec![]"#)]
+    pwg_raster_document_resolution_supported: Vec<Resolution>,
+    #[builder(default = r#"None"#)]
+    pwg_raster_document_sheet_back: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -444,6 +452,56 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 )
             );
         }
+        if !self.info.urf_supported.is_empty() {
+            add_if_requested!(
+                "urf-supported",
+                IppValue::Array(
+                    self.info
+                        .urf_supported
+                        .clone()
+                        .into_iter()
+                        .map(IppValue::Keyword)
+                        .collect::<Vec<_>>()
+                )
+            );
+        }
+        if !self.info.pwg_raster_document_type_supported.is_empty() {
+            add_if_requested!(
+                "pwg-raster-document-type-supported",
+                IppValue::Array(
+                    self.info
+                        .pwg_raster_document_type_supported
+                        .clone()
+                        .into_iter()
+                        .map(IppValue::Keyword)
+                        .collect::<Vec<_>>()
+                )
+            );
+        }
+        if !self
+            .info
+            .pwg_raster_document_resolution_supported
+            .is_empty()
+        {
+            add_if_requested!(
+                "pwg-raster-document-resolution-supported",
+                IppValue::Array(
+                    self.info
+                        .pwg_raster_document_resolution_supported
+                        .clone()
+                        .into_iter()
+                        .map(IppValue::from)
+                        .collect::<Vec<_>>()
+                )
+            );
+        }
+        optional_add_if_requested!(
+            "pwg-raster-document-sheet-back",
+            self.info
+                .pwg_raster_document_sheet_back
+                .clone()
+                .map(IppValue::Keyword)
+        );
         if is_requested!("job-creation-attributes-supported") {
             let mut job_creation_attributes_supported = vec![
                 IppValue::Keyword("job-name".to_string()),
