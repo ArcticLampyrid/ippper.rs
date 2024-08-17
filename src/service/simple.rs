@@ -644,11 +644,11 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         );
         add_if_requested!(
             description: IppAttribute::JOB_NAME,
-            IppValue::TextWithoutLanguage(format!("Job #{}", job.id))
+            IppValue::NameWithoutLanguage(format!("Job #{}", job.id))
         );
         add_if_requested!(
             description: "job-originating-user-name",
-            IppValue::TextWithoutLanguage(job.attributes.originating_user_name.clone())
+            IppValue::NameWithoutLanguage(job.attributes.originating_user_name.clone())
         );
         add_if_requested!(
             description: "time-at-creation",
