@@ -862,6 +862,13 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         {
             let mut job = job.write().await;
             if job.state != JobState::Processing {
+                if job.state == JobState::Canceled {
+                    return Err(IppError {
+                        code: StatusCode::ClientErrorNotPossible,
+                        msg: "Job is canceled".to_string(),
+                    }
+                    .into());
+                }
                 job.state = JobState::Processing;
                 job.state_message = "Processing".to_string();
                 job.processing_at = Some(self.uptime());
@@ -917,13 +924,27 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
     }
 
     async fn cancel_job(&self, _head: ReqParts, req: IppRequestResponse) -> IppResult {
-        let mut resp = IppRequestResponse::new_response(
-            req.header().version,
-            StatusCode::SuccessfulOk,
-            req.header().request_id,
-        );
-        self.add_basic_attributes(&mut resp);
-        Ok(resp)
+        let job = self.find_job(req.attributes()).await?;
+        let mut job = job.write().await;
+        if job.state == JobState::Pending {
+            job.state = JobState::Canceled;
+            job.state_message = "Canceled".to_string();
+            let mut resp = IppRequestResponse::new_response(
+                req.header().version,
+                StatusCode::SuccessfulOk,
+                req.header().request_id,
+            );
+            self.add_basic_attributes(&mut resp);
+            Ok(resp)
+        } else {
+            let mut resp = IppRequestResponse::new_response(
+                req.header().version,
+                StatusCode::ClientErrorNotPossible,
+                req.header().request_id,
+            );
+            self.add_basic_attributes(&mut resp);
+            Ok(resp)
+        }
     }
 
     async fn get_job_attributes(&self, head: ReqParts, req: IppRequestResponse) -> IppResult {
