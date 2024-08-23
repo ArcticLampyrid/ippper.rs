@@ -104,16 +104,36 @@ impl From<Resolution> for IppValue {
 pub enum WhichJob {
     NotCompleted,
     Completed,
+    Aborted,
+    All,
+    Canceled,
+    Pending,
+    PendingHeld,
+    Processing,
+    ProcessingStopped,
 }
 
-impl From<JobState> for WhichJob {
-    fn from(value: JobState) -> Self {
-        match value {
-            JobState::Pending
-            | JobState::PendingHeld
-            | JobState::Processing
-            | JobState::ProcessingStopped => WhichJob::NotCompleted,
-            JobState::Canceled | JobState::Aborted | JobState::Completed => WhichJob::Completed,
+impl WhichJob {
+    pub fn match_state(&self, state: JobState) -> bool {
+        match self {
+            WhichJob::NotCompleted => matches!(
+                state,
+                JobState::Pending
+                    | JobState::PendingHeld
+                    | JobState::Processing
+                    | JobState::ProcessingStopped
+            ),
+            WhichJob::Completed => matches!(
+                state,
+                JobState::Canceled | JobState::Aborted | JobState::Completed
+            ),
+            WhichJob::All => true,
+            WhichJob::Canceled => state == JobState::Canceled,
+            WhichJob::Pending => state == JobState::Pending,
+            WhichJob::PendingHeld => state == JobState::PendingHeld,
+            WhichJob::Processing => state == JobState::Processing,
+            WhichJob::ProcessingStopped => state == JobState::ProcessingStopped,
+            WhichJob::Aborted => state == JobState::Aborted,
         }
     }
 }

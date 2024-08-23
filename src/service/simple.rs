@@ -331,6 +331,13 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             IppValue::Array(vec![
                 IppValue::Keyword("completed".to_string()),
                 IppValue::Keyword("not-completed".to_string()),
+                IppValue::Keyword("aborted".to_string()),
+                IppValue::Keyword("all".to_string()),
+                IppValue::Keyword("canceled".to_string()),
+                IppValue::Keyword("pending".to_string()),
+                IppValue::Keyword("pending-held".to_string()),
+                IppValue::Keyword("processing".to_string()),
+                IppValue::Keyword("processing-stopped".to_string()),
             ])
         );
         add_if_requested!(description: "multiple-document-jobs-supported", IppValue::Boolean(false));
@@ -984,8 +991,29 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
 
         let which_jobs = match which_jobs.as_deref() {
             Some("completed") => WhichJob::Completed,
-            Some("not-completed") => WhichJob::NotCompleted,
-            _ => WhichJob::NotCompleted,
+            Some("not-completed") | None => WhichJob::NotCompleted,
+            Some("aborted") => WhichJob::Aborted,
+            Some("all") => WhichJob::All,
+            Some("canceled") => WhichJob::Canceled,
+            Some("pending") => WhichJob::Pending,
+            Some("pending-held") => WhichJob::PendingHeld,
+            Some("processing") => WhichJob::Processing,
+            Some("processing-stopped") => WhichJob::ProcessingStopped,
+            Some(unknown) => {
+                let mut resp = IppRequestResponse::new_response(
+                    req.header().version,
+                    StatusCode::ClientErrorAttributesOrValuesNotSupported,
+                    req.header().request_id,
+                );
+                self.add_basic_attributes(&mut resp);
+                let mut group = IppAttributeGroup::new(DelimiterTag::UnsupportedAttributes);
+                group.attributes_mut().insert(
+                    "which-jobs".to_string(),
+                    IppAttribute::new("which-jobs", IppValue::Keyword(unknown.to_string())),
+                );
+                resp.attributes_mut().groups_mut().push(group);
+                return Ok(resp);
+            }
         };
 
         let requested_attributes = get_requested_attributes(req.attributes());
@@ -999,7 +1027,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
 
         for (_, job) in self.job_snapshot.iter() {
             let job = job.read().await;
-            if which_jobs == WhichJob::from(job.state) {
+            if which_jobs.match_state(job.state) {
                 let job_attributes =
                     self.job_attributes_for(&head, job.deref(), &requested_attributes);
                 let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
