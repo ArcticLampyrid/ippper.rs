@@ -157,6 +157,7 @@ pub struct PrinterInfo {
 #[derive(Debug, Clone)]
 struct JobInfo {
     id: i32,
+    uuid: Uuid,
     state: JobState,
     state_message: String,
     state_reasons: IppValue,
@@ -679,6 +680,10 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             IppValue::Uri(self.make_url(head, format!("job/{}", job.id).as_str()))
         );
         add_if_requested!(description: IppAttribute::JOB_ID, IppValue::Integer(job.id));
+        add_if_requested!(
+            description: "job-uuid",
+            IppValue::Uri(job.uuid.urn().encode_lower(&mut Uuid::encode_buffer()).to_string())
+        );
         add_if_requested!(description: IppAttribute::JOB_STATE, IppValue::Enum(job.state as i32));
         add_if_requested!(description: "job-state-message", IppValue::TextWithoutLanguage(job.state_message.clone()));
         add_if_requested!(description: IppAttribute::JOB_STATE_REASONS, job.state_reasons.clone());
@@ -755,6 +760,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let job = self
             .alloc_job(|id| JobInfo {
                 id,
+                uuid: Uuid::new_v4(),
                 state: JobState::Processing,
                 state_message: "Processing".to_string(),
                 state_reasons: IppValue::Keyword("none".to_string()),
@@ -837,6 +843,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let job = self
             .alloc_job(|id| JobInfo {
                 id,
+                uuid: Uuid::new_v4(),
                 state: JobState::Pending,
                 state_message: "Pending".to_string(),
                 state_reasons: IppValue::Keyword("none".to_string()),
