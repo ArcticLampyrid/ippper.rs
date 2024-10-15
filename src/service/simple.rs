@@ -103,6 +103,8 @@ pub struct PrinterInfo {
     #[builder(default = r#"Some("IppServer by ippper".to_string())"#)]
     make_and_model: Option<String>,
     #[builder(default = r#"None"#)]
+    dnssd_name: Option<String>,
+    #[builder(default = r#"None"#)]
     uuid: Option<Uuid>,
     #[builder(default = r#"true"#)]
     color_supported: bool,
@@ -569,6 +571,10 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 .make_and_model
                 .clone()
                 .map(IppValue::TextWithoutLanguage)
+        );
+        optional_add_if_requested!(
+            description: "printer-dns-sd-name",
+            self.info.dnssd_name.clone().map(IppValue::NameWithoutLanguage)
         );
         optional_add_if_requested!(
             description: "printer-uuid",
