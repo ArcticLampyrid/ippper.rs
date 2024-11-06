@@ -51,7 +51,7 @@ http-body-util = "0.1"
 bytes = "1"
 ipp = { version = "5", features = ["async"], default-features = false }
 num-traits = "0.2"
-thiserror = "1.0"
+thiserror = "2.0"
 tokio = { version = "1", features = [
     "rt-multi-thread",
     "macros",
