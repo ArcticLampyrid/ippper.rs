@@ -5,7 +5,7 @@ use http::request::Parts as ReqParts;
 use ipp::attribute::IppAttribute;
 use ipp::model::{DelimiterTag, IppVersion, Operation, StatusCode};
 use ipp::request::IppRequestResponse;
-use ipp::value::IppValue;
+use ipp::value::{IppString, IppTextValue, IppValue};
 use num_traits::FromPrimitive;
 
 fn operation_not_supported() -> anyhow::Error {
@@ -166,12 +166,17 @@ pub trait IppService: Send + Sync {
                 msg: error.to_string(),
             },
         };
-        let mut resp = IppRequestResponse::new_response(version, ipp_error.code, req_id);
+        let mut resp = IppRequestResponse::new_response(version, ipp_error.code, req_id).unwrap();
+        let mut error_message_string = ipp_error.msg.clone();
+        error_message_string.truncate(IppString::max());
+        let error_message: IppTextValue = error_message_string
+            .try_into()
+            .unwrap_or_else(|_| "Error message not available".try_into().unwrap());
         resp.attributes_mut().add(
             DelimiterTag::OperationAttributes,
             IppAttribute::new(
-                IppAttribute::STATUS_MESSAGE,
-                IppValue::TextWithoutLanguage(ipp_error.msg),
+                IppAttribute::STATUS_MESSAGE.try_into().unwrap(),
+                IppValue::TextWithoutLanguage(error_message),
             ),
         );
         resp

@@ -3,7 +3,7 @@ use ipp::{
     attribute::{IppAttribute, IppAttributes},
     model::{DelimiterTag, StatusCode},
     payload::IppPayload,
-    value::IppValue,
+    value::{IppName, IppValue},
 };
 use std::collections::HashSet;
 mod reader_stream;
@@ -65,12 +65,12 @@ pub fn get_requested_attributes(r: &IppAttributes) -> HashSet<&str> {
     .unwrap_or_else(|| HashSet::from(["all"]))
 }
 
-pub fn take_requesting_user_name(r: &mut IppAttributes) -> String {
+pub fn take_requesting_user_name(r: &mut IppAttributes) -> IppName {
     take_ipp_attribute(r, DelimiterTag::OperationAttributes, "requesting-user-name")
         .and_then(|attr| match attr {
             IppValue::NameWithoutLanguage(name) => Some(name),
             IppValue::NameWithLanguage { name, .. } => Some(name),
             _ => None,
         })
-        .unwrap_or_else(|| "anonymous".to_string())
+        .unwrap_or_else(|| IppName::new("anonymous").unwrap())
 }

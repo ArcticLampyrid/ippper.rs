@@ -13,7 +13,7 @@ use ipp::attribute::{IppAttribute, IppAttributeGroup, IppAttributes};
 use ipp::model::{DelimiterTag, IppVersion, JobState, Operation, PrinterState, StatusCode};
 use ipp::payload::IppPayload;
 use ipp::request::IppRequestResponse;
-use ipp::value::IppValue;
+use ipp::value::{IppKeyword, IppMimeMediaType, IppName, IppString, IppTextValue, IppValue};
 use moka::future::{Cache, CacheBuilder};
 use std::collections::HashSet;
 use std::ops::Deref;
@@ -32,7 +32,7 @@ pub trait SimpleIppServiceHandler: Send + Sync {
 
 #[derive(fmt_derive::Debug)]
 pub struct SimpleIppDocument {
-    pub format: Option<String>,
+    pub format: Option<IppKeyword>,
     pub job_attributes: SimpleIppJobAttributes,
 
     #[fmt(ignore)]
@@ -41,18 +41,18 @@ pub struct SimpleIppDocument {
 
 #[derive(fmt_derive::Debug, Clone)]
 pub struct SimpleIppJobAttributes {
-    pub originating_user_name: String,
-    pub media: String,
+    pub originating_user_name: IppName,
+    pub media: IppKeyword,
     pub orientation: Option<PageOrientation>,
-    pub sides: String,
-    pub print_color_mode: String,
+    pub sides: IppKeyword,
+    pub print_color_mode: IppKeyword,
     pub printer_resolution: Option<Resolution>,
 }
 
 impl SimpleIppJobAttributes {
     pub(crate) fn take_ipp_attributes(
         info: &PrinterInfo,
-        originating_user_name: String,
+        originating_user_name: IppName,
         attributes: &mut IppAttributes,
     ) -> Self {
         let media = take_ipp_attribute(attributes, DelimiterTag::JobAttributes, "media")
@@ -96,64 +96,64 @@ impl SimpleIppJobAttributes {
 
 #[derive(Debug, Clone, Builder)]
 pub struct PrinterInfo {
-    #[builder(default = r#""IppServer".to_string()"#)]
-    name: String,
-    #[builder(default = r#"Some("IppServer by ippper".to_string())"#)]
-    info: Option<String>,
-    #[builder(default = r#"Some("IppServer by ippper".to_string())"#)]
-    make_and_model: Option<String>,
+    #[builder(default = r#""IppServer".try_into().unwrap()"#)]
+    name: IppName,
+    #[builder(default = r#"Some("IppServer by ippper".try_into().unwrap())"#)]
+    info: Option<IppTextValue>,
+    #[builder(default = r#"Some("IppServer by ippper".try_into().unwrap())"#)]
+    make_and_model: Option<IppTextValue>,
     #[builder(default = r#"None"#)]
-    dnssd_name: Option<String>,
+    dnssd_name: Option<IppName>,
     #[builder(default = r#"None"#)]
     uuid: Option<Uuid>,
     #[builder(default = r#"true"#)]
     color_supported: bool,
-    #[builder(default = r#"vec!["application/pdf".to_string()]"#)]
-    document_format_supported: Vec<String>,
-    #[builder(default = r#""application/pdf".to_string()"#)]
-    document_format_default: String,
-    #[builder(default = r#"Some("application/pdf".to_string())"#)]
-    document_format_preferred: Option<String>,
-    #[builder(default = r#"vec!["iso_a4_210x297mm".to_string()]"#)]
-    media_supported: Vec<String>,
-    #[builder(default = r#""iso_a4_210x297mm".to_string()"#)]
-    media_default: String,
+    #[builder(default = r#"vec!["application/pdf".try_into().unwrap()]"#)]
+    document_format_supported: Vec<IppMimeMediaType>,
+    #[builder(default = r#""application/pdf".try_into().unwrap()"#)]
+    document_format_default: IppMimeMediaType,
+    #[builder(default = r#"Some("application/pdf".try_into().unwrap())"#)]
+    document_format_preferred: Option<IppMimeMediaType>,
+    #[builder(default = r#"vec!["iso_a4_210x297mm".try_into().unwrap()]"#)]
+    media_supported: Vec<IppKeyword>,
+    #[builder(default = r#""iso_a4_210x297mm".try_into().unwrap()"#)]
+    media_default: IppKeyword,
     #[builder(default = r#"vec![PageOrientation::Portrait]"#)]
     orientation_supported: Vec<PageOrientation>,
     #[builder(default = r#"None"#)]
     orientation_default: Option<PageOrientation>,
-    #[builder(default = r#"vec!["one-sided".to_string()]"#)]
-    sides_supported: Vec<String>,
-    #[builder(default = r#""one-sided".to_string()"#)]
-    sides_default: String,
-    #[builder(default = r#"vec!["monochrome".to_string(), "color".to_string()]"#)]
-    print_color_mode_supported: Vec<String>,
-    #[builder(default = r#""monochrome".to_string()"#)]
-    print_color_mode_default: String,
+    #[builder(default = r#"vec!["one-sided".try_into().unwrap()]"#)]
+    sides_supported: Vec<IppKeyword>,
+    #[builder(default = r#""one-sided".try_into().unwrap()"#)]
+    sides_default: IppKeyword,
+    #[builder(default = r#"vec!["monochrome".try_into().unwrap(), "color".try_into().unwrap()]"#)]
+    print_color_mode_supported: Vec<IppKeyword>,
+    #[builder(default = r#""monochrome".try_into().unwrap()"#)]
+    print_color_mode_default: IppKeyword,
     #[builder(default = r#"vec![]"#)]
     printer_resolution_supported: Vec<Resolution>,
     #[builder(default = r#"None"#)]
     printer_resolution_default: Option<Resolution>,
     #[builder(default = r#"vec![
-        "adobe-1.2".to_string(),
-        "adobe-1.3".to_string(),
-        "adobe-1.4".to_string(),
-        "adobe-1.5".to_string(),
-        "adobe-1.6".to_string(),
-        "adobe-1.7".to_string(),
-        "iso-19005-1_2005".to_string(),
-        "iso-32000-1_2008".to_string(),
-        "pwg-5102.3".to_string(),
+        "adobe-1.2".try_into().unwrap(),
+        "adobe-1.3".try_into().unwrap(),
+        "adobe-1.4".try_into().unwrap(),
+        "adobe-1.5".try_into().unwrap(),
+        "adobe-1.6".try_into().unwrap(),
+        "adobe-1.7".try_into().unwrap(),
+        "iso-19005-1_2005".try_into().unwrap(),
+        "iso-32000-1_2008".try_into().unwrap(),
+        "pwg-5102.3".try_into().unwrap(),
     ]"#)]
-    pdf_versions_supported: Vec<String>,
+    pdf_versions_supported: Vec<IppKeyword>,
     #[builder(default = r#"vec![]"#)]
-    urf_supported: Vec<String>,
+    urf_supported: Vec<IppKeyword>,
     #[builder(default = r#"vec![]"#)]
-    pwg_raster_document_type_supported: Vec<String>,
+    pwg_raster_document_type_supported: Vec<IppKeyword>,
     #[builder(default = r#"vec![]"#)]
     pwg_raster_document_resolution_supported: Vec<Resolution>,
     #[builder(default = r#"None"#)]
-    pwg_raster_document_sheet_back: Option<String>,
+    pwg_raster_document_sheet_back: Option<IppKeyword>,
 }
 
 #[derive(Debug, Clone)]
@@ -161,7 +161,7 @@ struct JobInfo {
     id: i32,
     uuid: Uuid,
     state: JobState,
-    state_message: String,
+    state_message: IppTextValue,
     state_reasons: IppValue,
     attributes: SimpleIppJobAttributes,
     created_at: Duration,
@@ -202,7 +202,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
     pub fn set_info(&mut self, info: PrinterInfo) {
         self.info = info;
     }
-    fn make_url(&self, head: &ReqParts, path: &str) -> String {
+    fn make_url(&self, head: &ReqParts, path: &str) -> anyhow::Result<IppString> {
         let basepath = self.basepath.trim_start_matches('/').trim_end_matches('/');
         let slash_before_basepath = if basepath.is_empty() { "" } else { "/" };
         let slash_before_path = if path.starts_with('/') || path.is_empty() {
@@ -214,35 +214,45 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         let host = if let Some(host) = head.headers.get("Host") {
             let from_user = host.to_str().unwrap_or(self.host.as_str());
             if !from_user.contains(':') && self.host.contains(':') {
-                format!("{}:{}", from_user, self.host.split(':').last().unwrap())
+                format!(
+                    "{}:{}",
+                    from_user,
+                    self.host.split(':').next_back().unwrap()
+                )
             } else {
                 from_user.to_string()
             }
         } else {
             self.host.clone()
         };
-        format!(
+        Ok(IppString::new(format!(
             "{}://{}{}{}{}{}",
             scheme, host, slash_before_basepath, basepath, slash_before_path, path
-        )
+        ))?)
     }
     fn add_basic_attributes(&self, resp: &mut IppRequestResponse) {
         resp.attributes_mut().add(
             DelimiterTag::OperationAttributes,
             IppAttribute::new(
-                IppAttribute::ATTRIBUTES_CHARSET,
-                IppValue::Charset("utf-8".to_string()),
+                IppAttribute::ATTRIBUTES_CHARSET.try_into().unwrap(),
+                IppValue::Charset("utf-8".try_into().unwrap()),
             ),
         );
         resp.attributes_mut().add(
             DelimiterTag::OperationAttributes,
             IppAttribute::new(
-                IppAttribute::ATTRIBUTES_NATURAL_LANGUAGE,
-                IppValue::NaturalLanguage("en".to_string()),
+                IppAttribute::ATTRIBUTES_NATURAL_LANGUAGE
+                    .try_into()
+                    .unwrap(),
+                IppValue::NaturalLanguage("en".try_into().unwrap()),
             ),
         );
     }
-    fn printer_attributes(&self, head: &ReqParts, requested: &HashSet<&str>) -> Vec<IppAttribute> {
+    fn printer_attributes(
+        &self,
+        head: &ReqParts,
+        requested: &HashSet<&str>,
+    ) -> anyhow::Result<Vec<IppAttribute>> {
         let mut r = Vec::<IppAttribute>::new();
         let requested_all = requested.contains("all");
         let requested_printer_description =
@@ -258,62 +268,64 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         }
         macro_rules! add_if_requested {
             ($kind:ident : $name:expr, $value:expr) => {
-                if is_requested!($kind : $name) {
-                    r.push(IppAttribute::new($name, $value));
+                let name: IppName = $name;
+                if is_requested!($kind : name.as_str()) {
+                    r.push(IppAttribute::new(name, $value));
                 }
             };
         }
         macro_rules! optional_add_if_requested {
             ($kind:ident : $name:expr, $value:expr) => {
-                if is_requested!($kind : $name) {
+                let name: IppName = $name;
+                if is_requested!($kind : name.as_str()) {
                     if let Some(value) = $value {
-                        r.push(IppAttribute::new($name, value));
+                        r.push(IppAttribute::new(name, value));
                     }
                 }
             };
         }
 
         add_if_requested!(
-            description: IppAttribute::PRINTER_URI_SUPPORTED,
-            IppValue::Uri(self.make_url(head, "/"))
+            description: IppAttribute::PRINTER_URI_SUPPORTED.try_into()?,
+            IppValue::Uri(self.make_url(head, "/")?)
         );
         add_if_requested!(
-            description: IppAttribute::URI_AUTHENTICATION_SUPPORTED,
-            IppValue::Keyword("requesting-user-name".to_string())
+            description: IppAttribute::URI_AUTHENTICATION_SUPPORTED.try_into()?,
+            IppValue::Keyword("requesting-user-name".try_into()?)
         );
         add_if_requested!(
-            description: IppAttribute::URI_SECURITY_SUPPORTED,
+            description: IppAttribute::URI_SECURITY_SUPPORTED.try_into()?,
             IppValue::Keyword(
                 match head.uri.scheme_str() {
                     Some("ipps") => "tls",
                     Some("https") => "tls",
                     _ => "none",
                 }
-                .to_string()
+                .try_into()?
             )
         );
         add_if_requested!(
-            description: IppAttribute::PRINTER_NAME,
+            description: IppAttribute::PRINTER_NAME.try_into()?,
             IppValue::NameWithoutLanguage(self.info.name.clone())
         );
         add_if_requested!(
-            description: IppAttribute::PRINTER_STATE,
+            description: IppAttribute::PRINTER_STATE.try_into()?,
             IppValue::Enum(PrinterState::Idle as i32)
         );
         add_if_requested!(
-            description: IppAttribute::PRINTER_STATE_REASONS,
-            IppValue::Keyword("none".to_string())
+            description: IppAttribute::PRINTER_STATE_REASONS.try_into()?,
+            IppValue::Keyword("none".try_into()?)
         );
         add_if_requested!(
-            description: IppAttribute::IPP_VERSIONS_SUPPORTED,
+            description: IppAttribute::IPP_VERSIONS_SUPPORTED.try_into()?,
             IppValue::Array(vec![
-                IppValue::Keyword("1.0".to_string()),
-                IppValue::Keyword("1.1".to_string()),
-                IppValue::Keyword("2.0".to_string()),
+                IppValue::Keyword("1.0".try_into()?),
+                IppValue::Keyword("1.1".try_into()?),
+                IppValue::Keyword("2.0".try_into()?),
             ])
         );
         add_if_requested!(
-            description: IppAttribute::OPERATIONS_SUPPORTED,
+            description: IppAttribute::OPERATIONS_SUPPORTED.try_into()?,
             IppValue::Array(vec![
                 IppValue::Enum(Operation::PrintJob as i32),
                 IppValue::Enum(Operation::ValidateJob as i32),
@@ -326,46 +338,46 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             ])
         );
         add_if_requested!(
-            description: IppAttribute::COLOR_SUPPORTED,
+            description: IppAttribute::COLOR_SUPPORTED.try_into()?,
             IppValue::Boolean(self.info.color_supported)
         );
         add_if_requested!(
-            description: "which-jobs-supported",
+            description: "which-jobs-supported".try_into()?,
             IppValue::Array(vec![
-                IppValue::Keyword("completed".to_string()),
-                IppValue::Keyword("not-completed".to_string()),
-                IppValue::Keyword("aborted".to_string()),
-                IppValue::Keyword("all".to_string()),
-                IppValue::Keyword("canceled".to_string()),
-                IppValue::Keyword("pending".to_string()),
-                IppValue::Keyword("pending-held".to_string()),
-                IppValue::Keyword("processing".to_string()),
-                IppValue::Keyword("processing-stopped".to_string()),
+                IppValue::Keyword("completed".try_into()?),
+                IppValue::Keyword("not-completed".try_into()?),
+                IppValue::Keyword("aborted".try_into()?),
+                IppValue::Keyword("all".try_into()?),
+                IppValue::Keyword("canceled".try_into()?),
+                IppValue::Keyword("pending".try_into()?),
+                IppValue::Keyword("pending-held".try_into()?),
+                IppValue::Keyword("processing".try_into()?),
+                IppValue::Keyword("processing-stopped".try_into()?),
             ])
         );
-        add_if_requested!(description: "multiple-document-jobs-supported", IppValue::Boolean(false));
+        add_if_requested!(description: "multiple-document-jobs-supported".try_into()?, IppValue::Boolean(false));
         add_if_requested!(
-            description: IppAttribute::CHARSET_CONFIGURED,
-            IppValue::Charset("utf-8".to_string())
+            description: IppAttribute::CHARSET_CONFIGURED.try_into()?,
+            IppValue::Charset("utf-8".try_into()?)
         );
         add_if_requested!(
-            description: IppAttribute::CHARSET_SUPPORTED,
-            IppValue::Charset("utf-8".to_string())
+            description: IppAttribute::CHARSET_SUPPORTED.try_into()?,
+            IppValue::Charset("utf-8".try_into()?)
         );
         add_if_requested!(
-            description: IppAttribute::NATURAL_LANGUAGE_CONFIGURED,
-            IppValue::NaturalLanguage("en".to_string())
+            description: IppAttribute::NATURAL_LANGUAGE_CONFIGURED.try_into()?,
+            IppValue::NaturalLanguage("en".try_into()?)
         );
         add_if_requested!(
-            description: IppAttribute::GENERATED_NATURAL_LANGUAGE_SUPPORTED,
-            IppValue::NaturalLanguage("en".to_string())
+            description: IppAttribute::GENERATED_NATURAL_LANGUAGE_SUPPORTED.try_into()?,
+            IppValue::NaturalLanguage("en".try_into()?)
         );
         add_if_requested!(
-            description: IppAttribute::DOCUMENT_FORMAT_DEFAULT,
+            description: IppAttribute::DOCUMENT_FORMAT_DEFAULT.try_into()?,
             IppValue::MimeMediaType(self.info.document_format_default.clone())
         );
         add_if_requested!(
-            description: IppAttribute::DOCUMENT_FORMAT_SUPPORTED,
+            description: IppAttribute::DOCUMENT_FORMAT_SUPPORTED.try_into()?,
             IppValue::Array(
                 self.info
                     .document_format_supported
@@ -376,30 +388,30 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             )
         );
         add_if_requested!(
-            description: IppAttribute::PRINTER_IS_ACCEPTING_JOBS,
+            description: IppAttribute::PRINTER_IS_ACCEPTING_JOBS.try_into()?,
             IppValue::Boolean(true)
         );
         add_if_requested!(
-            description: IppAttribute::PDL_OVERRIDE_SUPPORTED,
-            IppValue::Keyword("attempted".to_string())
+            description: IppAttribute::PDL_OVERRIDE_SUPPORTED.try_into()?,
+            IppValue::Keyword("attempted".try_into()?)
         );
         add_if_requested!(
-            description: IppAttribute::PRINTER_UP_TIME,
+            description: IppAttribute::PRINTER_UP_TIME.try_into()?,
             IppValue::Integer(self.uptime().as_secs() as i32)
         );
         add_if_requested!(
-            description: IppAttribute::COMPRESSION_SUPPORTED,
+            description: IppAttribute::COMPRESSION_SUPPORTED.try_into()?,
             IppValue::Array(vec![
-                IppValue::Keyword("none".to_string()),
-                IppValue::Keyword("gzip".to_string()),
+                IppValue::Keyword("none".try_into()?),
+                IppValue::Keyword("gzip".try_into()?),
             ])
         );
         add_if_requested!(
-            template: IppAttribute::MEDIA_DEFAULT,
+            template: IppAttribute::MEDIA_DEFAULT.try_into()?,
             IppValue::Keyword(self.info.media_default.clone())
         );
         add_if_requested!(
-            template: IppAttribute::MEDIA_SUPPORTED,
+            template: IppAttribute::MEDIA_SUPPORTED.try_into()?,
             IppValue::Array(
                 self.info
                     .media_supported
@@ -410,14 +422,14 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             )
         );
         add_if_requested!(
-            template: IppAttribute::ORIENTATION_REQUESTED_DEFAULT,
+            template: IppAttribute::ORIENTATION_REQUESTED_DEFAULT.try_into()?,
             self.info
                 .orientation_default
                 .map(|orientation| orientation.into())
                 .unwrap_or(IppValue::NoValue)
         );
         add_if_requested!(
-            template: IppAttribute::ORIENTATION_REQUESTED_SUPPORTED,
+            template: IppAttribute::ORIENTATION_REQUESTED_SUPPORTED.try_into()?,
             IppValue::Array(
                 self.info
                     .orientation_supported
@@ -428,11 +440,11 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             )
         );
         add_if_requested!(
-            template: IppAttribute::SIDES_DEFAULT,
+            template: IppAttribute::SIDES_DEFAULT.try_into()?,
             IppValue::Keyword(self.info.sides_default.clone())
         );
         add_if_requested!(
-            template: IppAttribute::SIDES_SUPPORTED,
+            template: IppAttribute::SIDES_SUPPORTED.try_into()?,
             IppValue::Array(
                 self.info
                     .sides_supported
@@ -443,11 +455,11 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             )
         );
         add_if_requested!(
-            template: IppAttribute::PRINT_COLOR_MODE_DEFAULT,
+            template: IppAttribute::PRINT_COLOR_MODE_DEFAULT.try_into()?,
             IppValue::Keyword(self.info.print_color_mode_default.clone())
         );
         add_if_requested!(
-            template: IppAttribute::PRINT_COLOR_MODE_SUPPORTED,
+            template: IppAttribute::PRINT_COLOR_MODE_SUPPORTED.try_into()?,
             IppValue::Array(
                 self.info
                     .print_color_mode_supported
@@ -458,7 +470,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             )
         );
         optional_add_if_requested!(
-            description: "document-format-preferred",
+            description: "document-format-preferred".try_into()?,
             self.info
                 .document_format_preferred
                 .clone()
@@ -466,7 +478,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         );
         if !self.info.printer_resolution_supported.is_empty() {
             add_if_requested!(
-                template: IppAttribute::PRINTER_RESOLUTION_SUPPORTED,
+                template: IppAttribute::PRINTER_RESOLUTION_SUPPORTED.try_into()?,
                 IppValue::Array(
                     self.info
                         .printer_resolution_supported
@@ -478,12 +490,12 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             );
         }
         optional_add_if_requested!(
-            template: IppAttribute::PRINTER_RESOLUTION_DEFAULT,
+            template: IppAttribute::PRINTER_RESOLUTION_DEFAULT.try_into()?,
             self.info.printer_resolution_default.map(IppValue::from)
         );
         if !self.info.pdf_versions_supported.is_empty() {
             add_if_requested!(
-                description: "pdf-versions-supported",
+                description: "pdf-versions-supported".try_into()?,
                 IppValue::Array(
                     self.info
                         .pdf_versions_supported
@@ -496,7 +508,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         }
         if !self.info.urf_supported.is_empty() {
             add_if_requested!(
-                description: "urf-supported",
+                description: "urf-supported".try_into()?,
                 IppValue::Array(
                     self.info
                         .urf_supported
@@ -509,7 +521,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         }
         if !self.info.pwg_raster_document_type_supported.is_empty() {
             add_if_requested!(
-                description: "pwg-raster-document-type-supported",
+                description: "pwg-raster-document-type-supported".try_into()?,
                 IppValue::Array(
                     self.info
                         .pwg_raster_document_type_supported
@@ -526,7 +538,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             .is_empty()
         {
             add_if_requested!(
-                description: "pwg-raster-document-resolution-supported",
+                description: "pwg-raster-document-resolution-supported".try_into()?,
                 IppValue::Array(
                     self.info
                         .pwg_raster_document_resolution_supported
@@ -538,7 +550,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             );
         }
         optional_add_if_requested!(
-            description: "pwg-raster-document-sheet-back",
+            description: "pwg-raster-document-sheet-back".try_into()?,
             self.info
                 .pwg_raster_document_sheet_back
                 .clone()
@@ -546,55 +558,62 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         );
         if is_requested!(description: "job-creation-attributes-supported") {
             let mut job_creation_attributes_supported = vec![
-                IppValue::Keyword("job-name".to_string()),
-                IppValue::Keyword("media".to_string()),
-                IppValue::Keyword("orientation-requested".to_string()),
-                IppValue::Keyword("print-color-mode".to_string()),
-                IppValue::Keyword("sides".to_string()),
+                IppValue::Keyword("job-name".try_into()?),
+                IppValue::Keyword("media".try_into()?),
+                IppValue::Keyword("orientation-requested".try_into()?),
+                IppValue::Keyword("print-color-mode".try_into()?),
+                IppValue::Keyword("sides".try_into()?),
             ];
             if !self.info.printer_resolution_supported.is_empty() {
                 job_creation_attributes_supported
-                    .push(IppValue::Keyword("printer-resolution".to_string()));
+                    .push(IppValue::Keyword("printer-resolution".try_into()?));
             }
             r.push(IppAttribute::new(
-                "job-creation-attributes-supported",
+                "job-creation-attributes-supported".try_into()?,
                 IppValue::Array(job_creation_attributes_supported),
             ));
         }
         optional_add_if_requested!(
-            description: IppAttribute::PRINTER_INFO,
+            description: IppAttribute::PRINTER_INFO.try_into()?,
             self.info.info.clone().map(IppValue::TextWithoutLanguage)
         );
         optional_add_if_requested!(
-            description: IppAttribute::PRINTER_MAKE_AND_MODEL,
+            description: IppAttribute::PRINTER_MAKE_AND_MODEL.try_into()?,
             self.info
                 .make_and_model
                 .clone()
                 .map(IppValue::TextWithoutLanguage)
         );
         optional_add_if_requested!(
-            description: "printer-dns-sd-name",
+            description: "printer-dns-sd-name".try_into()?,
             self.info.dnssd_name.clone().map(IppValue::NameWithoutLanguage)
         );
         optional_add_if_requested!(
-            description: "printer-uuid",
-            self.info.uuid.map(|uuid| IppValue::Uri(
-                uuid.urn()
-                    .encode_lower(&mut Uuid::encode_buffer())
-                    .to_string()
-            ))
+            description: "printer-uuid".try_into()?,
+            match self.info.uuid {
+                Some(uuid) => Some(IppValue::Uri(
+                    uuid.urn()
+                        .encode_lower(&mut Uuid::encode_buffer())
+                        .to_string()
+                        .try_into()?
+                )),
+                None => None,
+            }
         );
 
-        r
+        Ok(r)
     }
     fn uptime(&self) -> Duration {
         self.start_time.elapsed()
     }
-    async fn alloc_job(&self, init: impl FnOnce(i32) -> JobInfo) -> RwLock<JobInfo> {
+    async fn alloc_job(
+        &self,
+        init: impl FnOnce(i32) -> anyhow::Result<JobInfo>,
+    ) -> anyhow::Result<RwLock<JobInfo>> {
         let id = self.job_id.fetch_add(1, Ordering::Relaxed);
-        let data = RwLock::new(init(id));
+        let data = RwLock::new(init(id)?);
         self.job_snapshot.insert(id, data.clone()).await;
-        data
+        Ok(data)
     }
     async fn find_job(&self, r: &IppAttributes) -> anyhow::Result<RwLock<JobInfo>> {
         let job_id = get_ipp_attribute(r, DelimiterTag::OperationAttributes, IppAttribute::JOB_ID)
@@ -613,7 +632,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             .into()),
         }
     }
-    fn take_document_format(&self, r: &mut IppAttributes) -> anyhow::Result<Option<String>> {
+    fn take_document_format(&self, r: &mut IppAttributes) -> anyhow::Result<Option<IppKeyword>> {
         let format = take_ipp_attribute(r, DelimiterTag::OperationAttributes, "document-format")
             .and_then(|attr| attr.into_mime_media_type().ok());
 
@@ -630,27 +649,37 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
 
         Ok(format)
     }
-    fn lite_job_attributes_for(&self, head: &ReqParts, job: &JobInfo) -> Vec<IppAttribute> {
-        vec![
+    fn lite_job_attributes_for(
+        &self,
+        head: &ReqParts,
+        job: &JobInfo,
+    ) -> anyhow::Result<Vec<IppAttribute>> {
+        Ok(vec![
             IppAttribute::new(
-                IppAttribute::JOB_URI,
-                IppValue::Uri(self.make_url(head, format!("job/{}", job.id).as_str())),
+                IppAttribute::JOB_URI.try_into()?,
+                IppValue::Uri(self.make_url(head, format!("job/{}", job.id).as_str())?),
             ),
-            IppAttribute::new(IppAttribute::JOB_ID, IppValue::Integer(job.id)),
-            IppAttribute::new(IppAttribute::JOB_STATE, IppValue::Enum(job.state as i32)),
+            IppAttribute::new(IppAttribute::JOB_ID.try_into()?, IppValue::Integer(job.id)),
             IppAttribute::new(
-                "job-state-message",
+                IppAttribute::JOB_STATE.try_into()?,
+                IppValue::Enum(job.state as i32),
+            ),
+            IppAttribute::new(
+                "job-state-message".try_into()?,
                 IppValue::TextWithoutLanguage(job.state_message.clone()),
             ),
-            IppAttribute::new(IppAttribute::JOB_STATE_REASONS, job.state_reasons.clone()),
-        ]
+            IppAttribute::new(
+                IppAttribute::JOB_STATE_REASONS.try_into()?,
+                job.state_reasons.clone(),
+            ),
+        ])
     }
     fn job_attributes_for(
         &self,
         head: &ReqParts,
         job: &JobInfo,
         requested: &HashSet<&str>,
-    ) -> Vec<IppAttribute> {
+    ) -> anyhow::Result<Vec<IppAttribute>> {
         let mut r = Vec::<IppAttribute>::new();
 
         let requested_all = requested.contains("all");
@@ -664,82 +693,85 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 requested_job_template || requested.contains($name)
             };
         }
+
         macro_rules! add_if_requested {
             ($kind:ident : $name:expr, $value:expr) => {
-                if is_requested!($kind : $name) {
-                    r.push(IppAttribute::new($name, $value));
+                let name: IppName = $name;
+                if is_requested!($kind : name.as_str()) {
+                    r.push(IppAttribute::new(name, $value));
                 }
             };
         }
         macro_rules! optional_add_if_requested {
             ($kind:ident : $name:expr, $value:expr) => {
-                if is_requested!($kind : $name) {
+                let name: IppName = $name;
+                if is_requested!($kind : name.as_str()) {
                     if let Some(value) = $value {
-                        r.push(IppAttribute::new($name, value));
+                        r.push(IppAttribute::new(name, value));
                     }
                 }
             };
         }
 
         add_if_requested!(
-            description: IppAttribute::JOB_URI,
-            IppValue::Uri(self.make_url(head, format!("job/{}", job.id).as_str()))
+            description: IppAttribute::JOB_URI.try_into()?,
+            IppValue::Uri(self.make_url(head, format!("job/{}", job.id).as_str())?)
         );
-        add_if_requested!(description: IppAttribute::JOB_ID, IppValue::Integer(job.id));
+        add_if_requested!(description: IppAttribute::JOB_ID.try_into()?, IppValue::Integer(job.id));
         add_if_requested!(
-            description: "job-uuid",
-            IppValue::Uri(job.uuid.urn().encode_lower(&mut Uuid::encode_buffer()).to_string())
+            description: "job-uuid".try_into()?,
+            IppValue::Uri(job.uuid.urn().encode_lower(&mut Uuid::encode_buffer()).to_string().try_into()?)
         );
-        add_if_requested!(description: IppAttribute::JOB_STATE, IppValue::Enum(job.state as i32));
-        add_if_requested!(description: "job-state-message", IppValue::TextWithoutLanguage(job.state_message.clone()));
-        add_if_requested!(description: IppAttribute::JOB_STATE_REASONS, job.state_reasons.clone());
+        add_if_requested!(description: IppAttribute::JOB_STATE.try_into()?, IppValue::Enum(job.state as i32));
+        add_if_requested!(description: "job-state-message".try_into()?, IppValue::TextWithoutLanguage(job.state_message.clone()));
+        add_if_requested!(description: IppAttribute::JOB_STATE_REASONS.try_into()?, job.state_reasons.clone());
         add_if_requested!(
-            description: "job-printer-uri",
-            IppValue::Uri(self.make_url(head, ""))
-        );
-        add_if_requested!(
-            description: IppAttribute::JOB_NAME,
-            IppValue::NameWithoutLanguage(format!("Job #{}", job.id))
+            description: "job-printer-uri".try_into()?,
+            IppValue::Uri(self.make_url(head, "")?)
         );
         add_if_requested!(
-            description: "job-originating-user-name",
+            description: IppAttribute::JOB_NAME.try_into()?,
+            IppValue::NameWithoutLanguage(format!("Job #{}", job.id).try_into()?)
+        );
+        add_if_requested!(
+            description: "job-originating-user-name".try_into()?,
             IppValue::NameWithoutLanguage(job.attributes.originating_user_name.clone())
         );
         add_if_requested!(
-            description: "time-at-creation",
+            description: "time-at-creation".try_into()?,
             IppValue::Integer(job.created_at.as_secs() as i32)
         );
         add_if_requested!(
-            description: "time-at-processing",
+            description: "time-at-processing".try_into()?,
             job.processing_at
                 .map_or(IppValue::NoValue, |x| IppValue::Integer(x.as_secs() as i32))
         );
         add_if_requested!(
-            description: "time-at-completed",
+            description: "time-at-completed".try_into()?,
             job.completed_at
                 .map_or(IppValue::NoValue, |x| IppValue::Integer(x.as_secs() as i32))
         );
         add_if_requested!(
-            description: "job-printer-up-time",
+            description: "job-printer-up-time".try_into()?,
             IppValue::Integer(self.uptime().as_secs() as i32)
         );
-        add_if_requested!(template: "media", IppValue::Keyword(job.attributes.media.clone()));
+        add_if_requested!(template: "media".try_into()?, IppValue::Keyword(job.attributes.media.clone()));
         add_if_requested!(
-            template: "orientation-requested",
+            template: "orientation-requested".try_into()?,
             job.attributes
                 .orientation
                 .map_or(IppValue::NoValue, IppValue::from)
         );
-        add_if_requested!(template: "sides", IppValue::Keyword(job.attributes.sides.clone()));
+        add_if_requested!(template: "sides".try_into()?, IppValue::Keyword(job.attributes.sides.clone()));
         add_if_requested!(
-            template: "print-color-mode",
+            template: "print-color-mode".try_into()?,
             IppValue::Keyword(job.attributes.print_color_mode.clone())
         );
         optional_add_if_requested!(
-            template: "printer-resolution",
+            template: "printer-resolution".try_into()?,
             job.attributes.printer_resolution.map(IppValue::from)
         );
-        r
+        Ok(r)
     }
 }
 
@@ -764,18 +796,20 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
 
         let created_at = self.uptime();
         let job = self
-            .alloc_job(|id| JobInfo {
-                id,
-                uuid: Uuid::new_v4(),
-                state: JobState::Processing,
-                state_message: "Processing".to_string(),
-                state_reasons: IppValue::Keyword("none".to_string()),
-                attributes: job_attributes.clone(),
-                created_at,
-                processing_at: Some(created_at),
-                completed_at: None,
+            .alloc_job(|id| {
+                Ok(JobInfo {
+                    id,
+                    uuid: Uuid::new_v4(),
+                    state: JobState::Processing,
+                    state_message: "Processing".try_into()?,
+                    state_reasons: IppValue::Keyword("none".try_into()?),
+                    attributes: job_attributes.clone(),
+                    created_at,
+                    processing_at: Some(created_at),
+                    completed_at: None,
+                })
             })
-            .await;
+            .await?;
 
         let format = self.take_document_format(&mut attributes)?;
         let compression = take_ipp_attribute(
@@ -797,10 +831,10 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             let mut job = job.write().await;
             if let Err(ref error) = document_handled {
                 job.state = JobState::Aborted;
-                job.state_message = format!("Aborted: {}", error);
+                job.state_message = format!("Aborted: {}", error).try_into()?;
             } else {
                 job.state = JobState::Completed;
-                job.state_message = "Completed".to_string();
+                job.state_message = "Completed".try_into()?;
             };
             job.completed_at = Some(self.uptime());
         }
@@ -808,10 +842,10 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let mut resp = if let Err(error) = document_handled {
             self.build_error_response(version, req_id, error)
         } else {
-            IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id)
+            IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id)?
         };
         self.add_basic_attributes(&mut resp);
-        let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref());
+        let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref())?;
         let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
         group
             .attributes_mut()
@@ -825,7 +859,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             req.header().version,
             StatusCode::SuccessfulOk,
             req.header().request_id,
-        );
+        )?;
         self.add_basic_attributes(&mut resp);
         Ok(resp)
     }
@@ -847,22 +881,24 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
 
         let created_at = self.uptime();
         let job = self
-            .alloc_job(|id| JobInfo {
-                id,
-                uuid: Uuid::new_v4(),
-                state: JobState::Pending,
-                state_message: "Pending".to_string(),
-                state_reasons: IppValue::Keyword("none".to_string()),
-                attributes: job_attributes.clone(),
-                created_at,
-                processing_at: Some(created_at),
-                completed_at: None,
+            .alloc_job(|id| {
+                Ok(JobInfo {
+                    id,
+                    uuid: Uuid::new_v4(),
+                    state: JobState::Pending,
+                    state_message: "Pending".try_into()?,
+                    state_reasons: IppValue::Keyword("none".try_into()?),
+                    attributes: job_attributes.clone(),
+                    created_at,
+                    processing_at: Some(created_at),
+                    completed_at: None,
+                })
             })
-            .await;
+            .await?;
 
-        let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id);
+        let mut resp = IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id)?;
         self.add_basic_attributes(&mut resp);
-        let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref());
+        let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref())?;
         let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
         group
             .attributes_mut()
@@ -890,7 +926,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
                     .into());
                 }
                 job.state = JobState::Processing;
-                job.state_message = "Processing".to_string();
+                job.state_message = "Processing".try_into()?;
                 job.processing_at = Some(self.uptime());
             }
             job_attributes = job.attributes.clone();
@@ -920,10 +956,10 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             let mut job = job.write().await;
             if let Err(ref error) = document_handled {
                 job.state = JobState::Aborted;
-                job.state_message = format!("Aborted: {}", error);
+                job.state_message = format!("Aborted: {}", error).try_into()?;
             } else {
                 job.state = JobState::Completed;
-                job.state_message = "Completed".to_string();
+                job.state_message = "Completed".try_into()?;
             };
             job.completed_at = Some(self.uptime());
         }
@@ -931,10 +967,10 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let mut resp = if let Err(error) = document_handled {
             self.build_error_response(version, req_id, error)
         } else {
-            IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id)
+            IppRequestResponse::new_response(version, StatusCode::SuccessfulOk, req_id)?
         };
         self.add_basic_attributes(&mut resp);
-        let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref());
+        let job_attributes = self.lite_job_attributes_for(&head, job.read().await.deref())?;
         let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
         group
             .attributes_mut()
@@ -948,12 +984,12 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
         let mut job = job.write().await;
         if job.state == JobState::Pending {
             job.state = JobState::Canceled;
-            job.state_message = "Canceled".to_string();
+            job.state_message = "Canceled".try_into()?;
             let mut resp = IppRequestResponse::new_response(
                 req.header().version,
                 StatusCode::SuccessfulOk,
                 req.header().request_id,
-            );
+            )?;
             self.add_basic_attributes(&mut resp);
             Ok(resp)
         } else {
@@ -961,7 +997,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
                 req.header().version,
                 StatusCode::ClientErrorNotPossible,
                 req.header().request_id,
-            );
+            )?;
             self.add_basic_attributes(&mut resp);
             Ok(resp)
         }
@@ -974,10 +1010,10 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             req.header().version,
             StatusCode::SuccessfulOk,
             req.header().request_id,
-        );
+        )?;
         self.add_basic_attributes(&mut resp);
         let job_attributes =
-            self.job_attributes_for(&head, job.read().await.deref(), &requested_attributes);
+            self.job_attributes_for(&head, job.read().await.deref(), &requested_attributes)?;
         let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
         group
             .attributes_mut()
@@ -1017,12 +1053,15 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
                     req.header().version,
                     StatusCode::ClientErrorAttributesOrValuesNotSupported,
                     req.header().request_id,
-                );
+                )?;
                 self.add_basic_attributes(&mut resp);
                 let mut group = IppAttributeGroup::new(DelimiterTag::UnsupportedAttributes);
                 group.attributes_mut().insert(
-                    "which-jobs".to_string(),
-                    IppAttribute::new("which-jobs", IppValue::Keyword(unknown.to_string())),
+                    "which-jobs".try_into()?,
+                    IppAttribute::new(
+                        "which-jobs".try_into()?,
+                        IppValue::Keyword(unknown.try_into()?),
+                    ),
                 );
                 resp.attributes_mut().groups_mut().push(group);
                 return Ok(resp);
@@ -1035,14 +1074,14 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             req.header().version,
             StatusCode::SuccessfulOk,
             req.header().request_id,
-        );
+        )?;
         self.add_basic_attributes(&mut resp);
 
         for (_, job) in self.job_snapshot.iter() {
             let job = job.read().await;
             if which_jobs.match_state(job.state) {
                 let job_attributes =
-                    self.job_attributes_for(&head, job.deref(), &requested_attributes);
+                    self.job_attributes_for(&head, job.deref(), &requested_attributes)?;
                 let mut group = IppAttributeGroup::new(DelimiterTag::JobAttributes);
                 group
                     .attributes_mut()
@@ -1050,7 +1089,7 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
                 resp.attributes_mut().groups_mut().push(group);
 
                 count += 1;
-                if limit.map_or(false, |x| count >= x) {
+                if limit.is_some_and(|x| count >= x) {
                     break;
                 }
             }
@@ -1064,10 +1103,10 @@ impl<T: SimpleIppServiceHandler> IppService for SimpleIppService<T> {
             req.header().version,
             StatusCode::SuccessfulOk,
             req.header().request_id,
-        );
+        )?;
         self.add_basic_attributes(&mut resp);
         let requested_attributes = get_requested_attributes(req.attributes());
-        let printer_attributes = self.printer_attributes(&head, &requested_attributes);
+        let printer_attributes = self.printer_attributes(&head, &requested_attributes)?;
         let mut group = IppAttributeGroup::new(DelimiterTag::PrinterAttributes);
         group.attributes_mut().extend(
             printer_attributes
