@@ -62,8 +62,7 @@ where
                 }
                 Poll::Ready(None) => return Poll::Ready(Ok(0)),
                 Poll::Ready(Some(Err(e))) => {
-                    return Poll::Ready(Err(io::Error::new(
-                        io::ErrorKind::Other,
+                    return Poll::Ready(Err(io::Error::other(
                         format!("Error reading body: {}", e),
                     )))
                 }

@@ -41,9 +41,9 @@ async fn main() -> anyhow::Result<()> {
             Uuid::parse_str("786a551c-65a3-43ce-89ba-33c51bae9bc2").unwrap(),
         ))
         .sides_supported(vec![
-            "one-sided".to_string(),
-            "two-sided-long-edge".to_string(),
-            "two-sided-short-edge".to_string(),
+            "one-sided".try_into()?,
+            "two-sided-long-edge".try_into()?,
+            "two-sided-short-edge".try_into()?,
         ])
         .printer_resolution_supported(vec![
             Resolution {
