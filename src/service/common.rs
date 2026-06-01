@@ -166,9 +166,16 @@ pub trait IppService: Send + Sync {
                 msg: error.to_string(),
             },
         };
-        let mut resp = IppRequestResponse::new_response(version, ipp_error.code, req_id).unwrap();
+        // SAFETY: IppRequestResponse::new_response should not fail for any version, status code or request id.
+        // It only spread the error when some internal invariant is violated (e.g. invalid header automatically
+        // appended by the library), which should not happen in this case.
+        let mut resp = IppRequestResponse::new_response(version, ipp_error.code, req_id)
+            .expect("failed to build IPP error response");
         let mut error_message_string = ipp_error.msg.clone();
-        error_message_string.truncate(IppString::max());
+        if error_message_string.len() > IppString::max() {
+            error_message_string
+                .truncate(error_message_string.floor_char_boundary(IppString::max()));
+        }
         let error_message: IppTextValue = error_message_string
             .try_into()
             .unwrap_or_else(|_| "Error message not available".try_into().unwrap());
