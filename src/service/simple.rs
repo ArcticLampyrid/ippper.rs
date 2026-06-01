@@ -32,7 +32,7 @@ pub trait SimpleIppServiceHandler: Send + Sync {
 
 #[derive(fmt_derive::Debug)]
 pub struct SimpleIppDocument {
-    pub format: Option<IppKeyword>,
+    pub format: Option<IppMimeMediaType>,
     pub job_attributes: SimpleIppJobAttributes,
 
     #[fmt(ignore)]
@@ -632,7 +632,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             .into()),
         }
     }
-    fn take_document_format(&self, r: &mut IppAttributes) -> anyhow::Result<Option<IppKeyword>> {
+    fn take_document_format(&self, r: &mut IppAttributes) -> anyhow::Result<Option<IppMimeMediaType>> {
         let format = take_ipp_attribute(r, DelimiterTag::OperationAttributes, "document-format")
             .and_then(|attr| attr.into_mime_media_type().ok());
 
