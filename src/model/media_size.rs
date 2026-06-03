@@ -2,7 +2,7 @@ use ipp::value::{IppName, IppValue};
 use std::collections::BTreeMap;
 use std::fmt;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MediaSize {
     /// `x-dimension` in hundredths of millimeters.
     pub x_dimension: i32,
@@ -42,6 +42,8 @@ impl From<BTreeMap<IppName, IppValue>> for MediaSize {
 }
 
 impl From<&MediaSize> for IppValue {
+    /// Converts a `MediaSize` into an IPP collection value with `x-dimension` and `y-dimension`.
+    /// If the dimension is missing, it defaults to 0.
     fn from(size: &MediaSize) -> Self {
         let mut collection: BTreeMap<IppName, IppValue> = BTreeMap::new();
         collection.insert(
