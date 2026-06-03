@@ -1,13 +1,12 @@
 use super::PrinterInfo;
 use crate::model::MediaSize;
 use ipp::value::IppKeyword;
-use std::collections::HashSet;
-use std::hash::Hash;
+use std::collections::{BTreeSet, HashSet};
 
-fn distinct_values<T: Eq + Hash>(values: impl IntoIterator<Item = T>) -> Vec<T> {
+fn distinct_values<T: Eq + Ord>(values: impl IntoIterator<Item = T>) -> Vec<T> {
     values
         .into_iter()
-        .collect::<HashSet<_>>()
+        .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()
 }
