@@ -1,4 +1,10 @@
+mod media_info;
+mod media_size;
+
 use ipp::{model::JobState, value::IppValue};
+
+pub use media_info::MediaInfo;
+pub use media_size::MediaSize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PageOrientation {

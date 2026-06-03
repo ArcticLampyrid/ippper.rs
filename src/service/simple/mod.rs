@@ -1,5 +1,7 @@
+mod media_supported_values;
+use self::media_supported_values::MediaSupportedValues;
 use crate::error::IppError;
-use crate::model::{PageOrientation, Resolution, WhichJob};
+use crate::model::{MediaInfo, MediaSize, PageOrientation, Resolution, WhichJob};
 use crate::result::IppResult;
 use crate::service::IppService;
 use crate::utils::{
@@ -39,10 +41,21 @@ pub struct SimpleIppDocument {
     pub payload: IppPayload,
 }
 
+fn default_media() -> MediaInfo {
+    MediaInfo {
+        name: Some("iso_a4_210x297mm".try_into().unwrap()),
+        size: Some(MediaSize::new(21000, 29700)),
+        margins: Some((0, 0, 0, 0)),
+        color: None,
+        source: Some("auto".try_into().unwrap()),
+        media_type: Some("stationery".try_into().unwrap()),
+    }
+}
+
 #[derive(fmt_derive::Debug, Clone)]
 pub struct SimpleIppJobAttributes {
     pub originating_user_name: IppName,
-    pub media: IppKeyword,
+    pub media: MediaInfo,
     pub orientation: Option<PageOrientation>,
     pub sides: IppKeyword,
     pub print_color_mode: IppKeyword,
@@ -55,8 +68,13 @@ impl SimpleIppJobAttributes {
         originating_user_name: IppName,
         attributes: &mut IppAttributes,
     ) -> Self {
-        let media = take_ipp_attribute(attributes, DelimiterTag::JobAttributes, "media")
-            .and_then(|attr| attr.into_keyword().ok())
+        let media_col = take_ipp_attribute(attributes, DelimiterTag::JobAttributes, "media-col");
+        let legacy_media = take_ipp_attribute(attributes, DelimiterTag::JobAttributes, "media")
+            .and_then(|attr| attr.into_keyword().ok());
+        let media = media_col
+            .and_then(|attr| attr.into_collection().ok())
+            .map(MediaInfo::from)
+            .or_else(|| legacy_media.map(MediaInfo::name_only))
             .unwrap_or_else(|| info.media_default.clone());
 
         let orientation = take_ipp_attribute(
@@ -114,10 +132,22 @@ pub struct PrinterInfo {
     document_format_default: IppMimeMediaType,
     #[builder(default = r#"Some("application/pdf".try_into().unwrap())"#)]
     document_format_preferred: Option<IppMimeMediaType>,
-    #[builder(default = r#"vec!["iso_a4_210x297mm".try_into().unwrap()]"#)]
-    media_supported: Vec<IppKeyword>,
-    #[builder(default = r#""iso_a4_210x297mm".try_into().unwrap()"#)]
-    media_default: IppKeyword,
+    #[builder(default = r#"vec![default_media()]"#)]
+    media_supported: Vec<MediaInfo>,
+    #[builder(default = r#"default_media()"#)]
+    media_default: MediaInfo,
+    /// Name of media attributes supported in this printer. If empty, media-col support is disabled.
+    /// `media-xxx-supported` attributes will only be advertised if the corresponding one is in this list.
+    #[builder(default = r#"vec![
+        "media-size".try_into().unwrap(),
+        "media-top-margin".try_into().unwrap(),
+        "media-right-margin".try_into().unwrap(),
+        "media-bottom-margin".try_into().unwrap(),
+        "media-left-margin".try_into().unwrap(),
+        "media-source".try_into().unwrap(),
+        "media-type".try_into().unwrap(),
+    ]"#)]
+    media_col_supported: Vec<IppKeyword>,
     #[builder(default = r#"vec![PageOrientation::Portrait]"#)]
     orientation_supported: Vec<PageOrientation>,
     #[builder(default = r#"None"#)]
@@ -176,6 +206,7 @@ pub struct SimpleIppService<T: SimpleIppServiceHandler> {
     host: String,
     basepath: String,
     info: PrinterInfo,
+    media_supported_values: MediaSupportedValues,
     handler: T,
 }
 impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
@@ -183,6 +214,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         let job_snapshot = CacheBuilder::new(1000)
             .time_to_live(Duration::from_secs(60 * 15))
             .build();
+        let media_supported_values = MediaSupportedValues::new(&info);
         Self {
             start_time: Instant::now(),
             job_id: AtomicI32::new(1000),
@@ -190,6 +222,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             host: "defaulthost:631".to_string(),
             basepath: "/".to_string(),
             info,
+            media_supported_values,
             handler,
         }
     }
@@ -200,6 +233,7 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
         self.basepath = basepath.to_string();
     }
     pub fn set_info(&mut self, info: PrinterInfo) {
+        self.media_supported_values = MediaSupportedValues::new(&info);
         self.info = info;
     }
     fn make_url(&self, head: &ReqParts, path: &str) -> anyhow::Result<IppString> {
@@ -406,21 +440,184 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 IppValue::Keyword("gzip".try_into()?),
             ])
         );
-        add_if_requested!(
+        optional_add_if_requested!(
             template: IppAttribute::MEDIA_DEFAULT.try_into()?,
-            IppValue::Keyword(self.info.media_default.clone())
+            self.info.media_default.name.clone().map(IppValue::Keyword)
         );
         add_if_requested!(
             template: IppAttribute::MEDIA_SUPPORTED.try_into()?,
             IppValue::Array(
-                self.info
-                    .media_supported
+                self.media_supported_values
+                    .names
                     .clone()
                     .into_iter()
                     .map(IppValue::Keyword)
                     .collect::<Vec<_>>()
             )
         );
+        if self.media_supported_values.has_media_col_support {
+            add_if_requested!(
+                template: "media-col-supported".try_into()?,
+                IppValue::Array(
+                    self.info
+                        .media_col_supported
+                        .clone()
+                        .into_iter()
+                        .map(IppValue::Keyword)
+                        .collect::<Vec<_>>()
+                )
+            );
+            add_if_requested!(
+                template: "media-col-default".try_into()?,
+                IppValue::from(&self.info.media_default)
+            );
+            add_if_requested!(
+                template: "media-col-database".try_into()?,
+                IppValue::Array(
+                    self.info
+                        .media_supported
+                        .iter()
+                        .map(IppValue::from)
+                        .collect::<Vec<_>>()
+                )
+            );
+            if self
+                .media_supported_values
+                .media_col_support_set
+                .contains("media-size")
+            {
+                add_if_requested!(
+                    template: "media-size-supported".try_into()?,
+                    IppValue::Array(
+                        self.media_supported_values
+                            .sizes
+                            .iter()
+                            .copied()
+                            .map(IppValue::from)
+                            .collect::<Vec<_>>()
+                    )
+                );
+            }
+            if self
+                .media_supported_values
+                .media_col_support_set
+                .contains("media-top-margin")
+            {
+                add_if_requested!(
+                    template: "media-top-margin-supported".try_into()?,
+                    IppValue::Array(
+                        self.media_supported_values
+                            .top_margins
+                            .iter()
+                            .copied()
+                            .map(IppValue::Integer)
+                            .collect::<Vec<_>>()
+                    )
+                );
+            }
+            if self
+                .media_supported_values
+                .media_col_support_set
+                .contains("media-right-margin")
+            {
+                add_if_requested!(
+                    template: "media-right-margin-supported".try_into()?,
+                    IppValue::Array(
+                        self.media_supported_values
+                            .right_margins
+                            .iter()
+                            .copied()
+                            .map(IppValue::Integer)
+                            .collect::<Vec<_>>()
+                    )
+                );
+            }
+            if self
+                .media_supported_values
+                .media_col_support_set
+                .contains("media-bottom-margin")
+            {
+                add_if_requested!(
+                    template: "media-bottom-margin-supported".try_into()?,
+                    IppValue::Array(
+                        self.media_supported_values
+                            .bottom_margins
+                            .iter()
+                            .copied()
+                            .map(IppValue::Integer)
+                            .collect::<Vec<_>>()
+                    )
+                );
+            }
+            if self
+                .media_supported_values
+                .media_col_support_set
+                .contains("media-left-margin")
+            {
+                add_if_requested!(
+                    template: "media-left-margin-supported".try_into()?,
+                    IppValue::Array(
+                        self.media_supported_values
+                            .left_margins
+                            .iter()
+                            .copied()
+                            .map(IppValue::Integer)
+                            .collect::<Vec<_>>()
+                    )
+                );
+            }
+            if self
+                .media_supported_values
+                .media_col_support_set
+                .contains("media-color")
+            {
+                add_if_requested!(
+                    template: "media-color-supported".try_into()?,
+                    IppValue::Array(
+                        self.media_supported_values
+                            .colors
+                            .clone()
+                            .into_iter()
+                            .map(IppValue::Keyword)
+                            .collect::<Vec<_>>()
+                    )
+                );
+            }
+            if self
+                .media_supported_values
+                .media_col_support_set
+                .contains("media-source")
+            {
+                add_if_requested!(
+                    template: "media-source-supported".try_into()?,
+                    IppValue::Array(
+                        self.media_supported_values
+                            .sources
+                            .clone()
+                            .into_iter()
+                            .map(IppValue::Keyword)
+                            .collect::<Vec<_>>()
+                    )
+                );
+            }
+            if self
+                .media_supported_values
+                .media_col_support_set
+                .contains("media-type")
+            {
+                add_if_requested!(
+                    template: "media-type-supported".try_into()?,
+                    IppValue::Array(
+                        self.media_supported_values
+                            .media_types
+                            .clone()
+                            .into_iter()
+                            .map(IppValue::Keyword)
+                            .collect::<Vec<_>>()
+                    )
+                );
+            }
+        }
         add_if_requested!(
             template: IppAttribute::ORIENTATION_REQUESTED_DEFAULT.try_into()?,
             self.info
@@ -564,6 +761,9 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
                 IppValue::Keyword("print-color-mode".try_into()?),
                 IppValue::Keyword("sides".try_into()?),
             ];
+            if self.media_supported_values.has_media_col_support {
+                job_creation_attributes_supported.push(IppValue::Keyword("media-col".try_into()?));
+            }
             if !self.info.printer_resolution_supported.is_empty() {
                 job_creation_attributes_supported
                     .push(IppValue::Keyword("printer-resolution".try_into()?));
@@ -632,7 +832,10 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             .into()),
         }
     }
-    fn take_document_format(&self, r: &mut IppAttributes) -> anyhow::Result<Option<IppMimeMediaType>> {
+    fn take_document_format(
+        &self,
+        r: &mut IppAttributes,
+    ) -> anyhow::Result<Option<IppMimeMediaType>> {
         let format = take_ipp_attribute(r, DelimiterTag::OperationAttributes, "document-format")
             .and_then(|attr| attr.into_mime_media_type().ok());
 
@@ -755,7 +958,16 @@ impl<T: SimpleIppServiceHandler> SimpleIppService<T> {
             description: "job-printer-up-time".try_into()?,
             IppValue::Integer(self.uptime().as_secs() as i32)
         );
-        add_if_requested!(template: "media".try_into()?, IppValue::Keyword(job.attributes.media.clone()));
+        optional_add_if_requested!(
+            template: "media".try_into()?,
+            job.attributes.media.name.clone().map(IppValue::Keyword)
+        );
+        if self.media_supported_values.has_media_col_support {
+            add_if_requested!(
+                template: "media-col".try_into()?,
+                IppValue::from(&job.attributes.media)
+            );
+        }
         add_if_requested!(
             template: "orientation-requested".try_into()?,
             job.attributes
