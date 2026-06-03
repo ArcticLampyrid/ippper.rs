@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 
 use super::media_size::MediaSize;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MediaInfo {
     /// PWG 5101.1 media name, also used for legacy `media`.
     pub name: Option<IppKeyword>,
