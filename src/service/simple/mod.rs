@@ -136,8 +136,8 @@ pub struct PrinterInfo {
     media_supported: Vec<MediaInfo>,
     #[builder(default = r#"default_media()"#)]
     media_default: MediaInfo,
-    /// Names of `media-col` members this service advertises and returns.
-    /// Empty means media-col support is disabled.
+    /// Name of media attributes supported in this printer. If empty, media-col support is disabled.
+    /// `media-xxx-supported` attributes will only be advertised if the corresponding one is in this list.
     #[builder(default = r#"vec![
         "media-size".try_into().unwrap(),
         "media-top-margin".try_into().unwrap(),
