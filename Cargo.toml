@@ -49,7 +49,7 @@ http = "1"
 http-body = "1"
 http-body-util = "0.1"
 bytes = "1"
-ipp = { version = "6", features = ["async"], default-features = false }
+ipp = { version = "8", features = ["async"], default-features = false }
 num-traits = "0.2"
 thiserror = "2"
 tokio = { version = "1", features = [
