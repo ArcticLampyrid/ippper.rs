@@ -124,16 +124,17 @@ where
 /// ALPN protocols are automatically set to h2, http/1.1, and http/1.0.
 #[cfg(feature = "server-tls")]
 pub fn tls_config_from_reader<R: std::io::Read>(cert: R, key: R) -> anyhow::Result<ServerConfig> {
-    use std::io::{self, BufReader};
-    let certs = rustls_pemfile::certs(&mut BufReader::new(cert))
+    use std::io;
+    use tokio_rustls::rustls::pki_types::{pem, pem::PemObject, CertificateDer, PrivateKeyDer};
+    let certs = CertificateDer::pem_reader_iter(cert)
         .filter_map(|cert| cert.ok())
         .collect::<Vec<_>>();
-    let key = rustls_pemfile::private_key(&mut BufReader::new(key))?;
-    let key = match key {
-        Some(x) => x,
-        None => {
+    let key = match PrivateKeyDer::from_pem_reader(key) {
+        Ok(x) => x,
+        Err(pem::Error::NoItemsFound) => {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "No private key found").into())
         }
+        Err(e) => return Err(e.into()),
     };
     let mut config = ServerConfig::builder()
         .with_no_client_auth()
