@@ -2,7 +2,7 @@ use crate::error::IppError;
 use crate::result::IppResult;
 use anyhow;
 use http::request::Parts as ReqParts;
-use ipp::attribute::IppAttribute;
+use ipp::attribute::{IppAttribute, IppAttributeName};
 use ipp::model::{DelimiterTag, IppVersion, Operation, StatusCode};
 use ipp::request::IppRequestResponse;
 use ipp::value::{IppString, IppTextValue, IppValue};
@@ -156,7 +156,7 @@ pub trait IppService: Send + Sync {
     fn build_error_response(
         &self,
         version: IppVersion,
-        req_id: u32,
+        req_id: i32,
         error: anyhow::Error,
     ) -> IppRequestResponse {
         let ipp_error = match error.downcast_ref::<IppError>() {
@@ -182,7 +182,7 @@ pub trait IppService: Send + Sync {
         resp.attributes_mut().add(
             DelimiterTag::OperationAttributes,
             IppAttribute::new(
-                IppAttribute::STATUS_MESSAGE.try_into().unwrap(),
+                IppAttributeName::STATUS_MESSAGE,
                 IppValue::TextWithoutLanguage(error_message),
             ),
         );
@@ -208,7 +208,7 @@ pub trait IppService: Send + Sync {
                 );
             }
             let version = req.header().version;
-            match Operation::from_u16(req.header().operation_or_status) {
+            match Operation::from_i16(req.header().operation_or_status) {
                 Some(op) => match op {
                     Operation::PrintJob => self.print_job(head, req).await,
                     Operation::PrintUri => self.print_uri(head, req).await,
