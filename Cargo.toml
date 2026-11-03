@@ -14,7 +14,7 @@ version = "0.6.0"
 [features]
 default = ["server", "server-tls", "rustls-aws-lc-rs"]
 server = ["dep:hyper", "dep:hyper-util", "dep:tokio"]
-server-tls = ["server", "dep:tokio-rustls", "dep:rustls-pemfile"]
+server-tls = ["server", "dep:tokio-rustls"]
 rustls-aws-lc-rs = ["tokio-rustls?/aws-lc-rs"]
 rustls-ring = ["tokio-rustls?/ring"]
 
@@ -47,9 +47,8 @@ hyper-util = { version = "0.1", features = [
 ], optional = true }
 http = "1"
 http-body = "1"
-http-body-util = "0.1"
 bytes = "1"
-ipp = { version = "6", features = ["async"], default-features = false }
+ipp = { version = "8", features = ["async"], default-features = false }
 num-traits = "0.2"
 thiserror = "2"
 tokio = { version = "1", features = [
@@ -58,7 +57,6 @@ tokio = { version = "1", features = [
     "net",
 ], default-features = false, optional = true }
 uuid = "1"
-rustls-pemfile = { version = "2", optional = true }
 pin-project-lite = "0.2"
 moka = { version = "0.12", features = ["future"], default-features = false }
 

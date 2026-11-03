@@ -16,7 +16,7 @@ pub fn get_ipp_attribute<'a>(
     name: &str,
 ) -> Option<&'a IppValue> {
     r.groups_of(tag)
-        .find_map(|g| g.attributes().get(name))
+        .find_map(|g| g.get(name))
         .map(|a| a.value())
 }
 
@@ -28,7 +28,11 @@ pub fn take_ipp_attribute(
     r.groups_mut()
         .iter_mut()
         .filter(|g| g.tag() == tag)
-        .find_map(|g| g.attributes_mut().remove(name))
+        .find_map(|g| {
+            let attributes = g.attributes_mut();
+            let index = attributes.iter().position(|a| a.name().as_str() == name)?;
+            Some(attributes.remove(index))
+        })
         .map(|a| a.into_value())
 }
 
