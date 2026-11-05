@@ -12,7 +12,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 #[cfg(feature = "server-tls")]
-use tokio_rustls::{rustls::ServerConfig, TlsAcceptor};
+use tokio_rustls::rustls::ServerConfig;
+
+#[cfg(feature = "server-tls")]
+mod adaptive;
 
 /// Wrap an IPP service as a HTTP service
 pub fn wrap_as_http_service<T>(
@@ -63,7 +66,20 @@ where
     }
 }
 
-/// Serve HTTP and HTTPS on the same port
+/// Serve HTTP and HTTPS on the same port.
+///
+/// Plain HTTP/1.1 clients may also switch to TLS in place, as described in
+/// RFC 2817, by sending `Connection: Upgrade` and `Upgrade: TLS/1.2` or
+/// `TLS/1.3`. The highest offered version enabled in `tls_config` is advertised
+/// in the upgrade response; if none is available, the request is handled as
+/// ordinary HTTP. The advertised version is advisory: the TLS handshake
+/// independently negotiates a version allowed by `tls_config` and the client,
+/// which may be higher or lower. After the handshake, the original request is
+/// answered over TLS on HTTP/1.1.
+///
+/// The upgrade request, including its body, travels in plaintext. Clients that
+/// need to protect a request should upgrade with `OPTIONS *` first. Upgrade
+/// request bodies are buffered in temporary files without a size limit.
 #[cfg(feature = "server-tls")]
 pub async fn serve_adaptive_https<S, B>(
     addr: SocketAddr,
@@ -79,7 +95,7 @@ where
     B::Error: Into<Box<dyn StdError + Send + Sync>>,
 {
     let listener = TcpListener::bind(addr).await?;
-    let acceptor = TlsAcceptor::from(tls_config);
+    let acceptor = adaptive::Acceptor::new(tls_config).map_err(anyhow::Error::from_boxed)?;
     loop {
         let stream = match listener.accept().await {
             Ok((stream, _)) => stream,
@@ -91,29 +107,7 @@ where
         let service = service.clone();
         let acceptor = acceptor.clone();
         tokio::task::spawn(async move {
-            let mut header = [0u8; 1];
-            if let Err(err) = stream.peek(&mut header).await {
-                log::error!("Error peeking connection: {:?}", err);
-                return;
-            }
-            let result = if header[0] != 22 {
-                // Not a TLS connection
-                hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
-                    .serve_connection(TokioIo::new(stream), service)
-                    .await
-            } else {
-                let stream = match acceptor.accept(stream).await {
-                    Ok(stream) => stream,
-                    Err(err) => {
-                        log::error!("Error accepting TLS connection: {:?}", err);
-                        return;
-                    }
-                };
-                hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
-                    .serve_connection(TokioIo::new(stream), service)
-                    .await
-            };
-            if let Err(err) = result {
+            if let Err(err) = acceptor.serve(stream, service).await {
                 log::error!("Error serving connection: {:?}", err);
             }
         });
@@ -122,6 +116,7 @@ where
 
 /// Create a TLS config from a reader of certificate and key files.  
 /// ALPN protocols are automatically set to h2, http/1.1, and http/1.0.
+/// TLS 1.2 and TLS 1.3 are enabled; TLS 1.0 and TLS 1.1 are not supported.
 #[cfg(feature = "server-tls")]
 pub fn tls_config_from_reader<R: std::io::Read>(cert: R, key: R) -> anyhow::Result<ServerConfig> {
     use std::io;
